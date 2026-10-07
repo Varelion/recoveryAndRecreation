@@ -1,9 +1,8 @@
-"""Discord connection: REST session, slash-command tree and raw gateway feeds.
+"""Discord connection: REST session and raw gateway feeds.
 
     Link ──login──► Rest (HTTP, rate limited)
-      ├──connect──► gateway ──raw JSON──┬─► feed queue ──► watcher A
-      │                                 └─► feed queue ──► watcher B
-      └──tree─────► slash commands (published by sync_commands)
+      └──connect──► gateway ──raw JSON──┬─► feed queue ──► watcher A
+                                        └─► feed queue ──► watcher B
 
 Each feed is a FIFO queue, so a consumer sees events in arrival order
 (e.g. MESSAGE_CREATE before its MESSAGE_UPDATE).
@@ -17,7 +16,6 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import discord
-from discord import app_commands
 
 from vault.api.rest import Rest
 
@@ -45,7 +43,6 @@ class _Client(discord.Client):
             chunk_guilds_at_startup=False,
         )
         self.feeds: set[asyncio.Queue] = set()
-        self.tree = app_commands.CommandTree(self)
 
     async def on_socket_raw_receive(self, msg: str | dict) -> None:
         # Raw payloads keep fields discord.py drops. No await before put: keeps order.
@@ -70,14 +67,6 @@ class Link:
 
     async def __aexit__(self, *_: object) -> None:
         await self._client.close()
-
-    @property
-    def tree(self) -> app_commands.CommandTree:
-        return self._client.tree
-
-    async def sync_commands(self) -> None:
-        """Publish registered slash commands. Bulk overwrite: idempotent, one request."""
-        await self._client.tree.sync()
 
     async def connect(self) -> None:
         """Run the gateway until closed; reconnects on drops."""

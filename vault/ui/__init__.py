@@ -1,1 +1,1 @@
-"""User interfaces: console and Discord slash commands."""
+"""User interface: console progress."""

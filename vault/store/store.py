@@ -72,11 +72,6 @@ class Store:
             (scope, key, value, now()),
         )
 
-    async def flagged(self, scope: str) -> list[int]:
-        """Keys of a scope whose cursor value is 1 (on/off flags)."""
-        rows = await self._all("SELECT key FROM cursors WHERE scope = ? AND value = 1", (scope,))
-        return [r[0] for r in rows]
-
     # ------------------------------------------------------------ entities
 
     async def put(self, kind: str, raw: Json, guild_id: int) -> Change:

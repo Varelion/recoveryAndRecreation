@@ -4,14 +4,14 @@ Archives a Discord guild into SQLite for analytics, keeps it current
 incrementally, and recreates it in another guild.
 
 ```
-   ui:        cli.py (console progress)      ui/bot.py (/vault commands, live progress messages)
-                        └──────────────┬──────────────┘
+   ui:                    cli.py (console progress)
+                                       │
    facade:                  Vault ── Jobs (task + Progress per action)
                                        │
    services:  Exporter   Watcher   Importer   Downloader   dump
                  │          │          │           │         │
    drivers:   api.Rest ◄────┴──────────┘───────────┘         │
-              api.Link (gateway, command tree)               │
+              api.Link (gateway)                             │
                  │                                           │
    store:     Store ──► SQLite (tables + history + views) ◄──┘
 ```
@@ -29,7 +29,8 @@ Bot, in the Developer Portal:
   Manage Guild (invites), Manage Webhooks (webhook list), Ban Members (ban list),
   Manage Threads (private archived threads). Anything missing is skipped and counted.
 - Target guild (import): Administrator.
-- Invite with scopes `bot` and `applications.commands` to use slash commands.
+- Invite with scope `bot`. It registers no slash commands: the bot's Discord application
+  may be shared with another bot (Courts Unbound's Bot2), whose commands stay its own.
 
 ## Commands
 
@@ -43,30 +44,6 @@ python -m vault stats [--guild ID]
 
 `--db path` (before the command) picks the database; default `vault.db`.
 CLI jobs print a progress line every 5 s.
-
-## From the server
-
-```
-python -m vault bot
-```
-
-Serves slash commands in every guild the bot is in. Every action runs as a
-background job with a live progress message (bar, %, ETA, phase, counters)
-edited every 5 s in the channel where it was started.
-
-| Command | Does |
-|---|---|
-| `/vault export [media] [reaction_users] [rescan_days]` | Export this server |
-| `/vault import source:<id> [mode] [messages]` | Recreate a stored server here. Defaults to `DRY_RUN`. |
-| `/vault watch action:start\|stop` | Record live events; resumed after a bot restart |
-| `/vault jobs` | This server's jobs with status and % |
-| `/vault progress job:<#>` | Post another live tracker for any job (autocomplete) |
-| `/vault cancel job:<#>` | Stop a job; it resumes where it stopped if started again |
-| `/vault stats` | Row counts |
-
-Commands default to Administrator; change who sees them under
-Server Settings > Integrations. One job per kind per server runs at a time.
-Job history lives in memory (last 50); the `runs` table keeps a permanent log.
 
 ## What is collected
 

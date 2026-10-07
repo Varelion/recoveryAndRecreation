@@ -5,7 +5,6 @@
     python -m vault import  <source> <target>  recreate into another guild
     python -m vault dump    --out dir          CSV/JSONL of all tables + views
     python -m vault stats                      row counts
-    python -m vault bot                        slash commands with live progress
 """
 
 import argparse
@@ -22,7 +21,6 @@ from vault.services.exporter import ExportOptions
 from vault.services.importer import ImportOptions
 from vault.services.vault import Vault
 from vault.store import Store
-from vault.ui.bot import Tracker, register
 from vault.ui.console import follow
 
 
@@ -54,9 +52,6 @@ def _parser() -> argparse.ArgumentParser:
 
     stats = sub.add_parser("stats", help="Row counts")
     stats.add_argument("--guild", type=int)
-
-    bot = sub.add_parser("bot", help="Serve /vault slash commands; resumes active watches")
-    bot.add_argument("--media-dir", type=Path, default=Path(config.MEDIA_DIR))
     return root
 
 
@@ -118,12 +113,6 @@ async def _dispatch(args: argparse.Namespace, store: Store) -> None:
             if not args.no_catch_up:
                 await follow(vault.export(args.guild, _export_options(args)))
             await _online(link, follow(await vault.watch(args.guild)))
-            return
-
-        register(link.tree, vault, Tracker(link.rest), args.media_dir)
-        await link.sync_commands()
-        await vault.resume_watches()
-        await _online(link, asyncio.Event().wait())
 
 
 async def _online(link: Link, work) -> None:

@@ -1,17 +1,13 @@
 import asyncio
 
-import discord
 import pytest
-from discord import app_commands
 
 from fakes import GUILD, TEXT, FakeRest, message
 from vault.services.exporter import ExportOptions, Exporter
 from vault.services.jobs import Busy, Jobs
 from vault.services.progress import Progress, Status
-from vault.services.vault import Vault
 from vault.store import Store
 from vault.ui import render
-from vault.ui.bot import Tracker, register
 
 
 @pytest.fixture
@@ -41,21 +37,6 @@ def test_open_ended_progress_has_no_fraction():
     p.phase("listening")
     assert p.fraction() is None
     assert "live" in render.line(1, p.snapshot())
-
-
-def test_render_embed():
-    p = Progress("export", {"messages": 1})
-    p.phase("messages", 4)
-    p.advance(1)
-    p.detail("#general")
-    p.counters["messages_seen"] = 1234
-
-    e = render.embed(7, p.snapshot())
-
-    assert e["title"] == "Export · job #7"
-    assert "25%" in e["description"]
-    assert "#general" in e["fields"][0]["value"]
-    assert "1,234" in e["fields"][2]["value"]
 
 
 async def test_jobs_lifecycle():
@@ -117,46 +98,3 @@ async def test_export_progress_reaches_full(store):
     assert seen and seen[-1] == pytest.approx(1.0)
     assert progress.counters["messages_seen"] == 3
 
-
-class _Link:
-    def __init__(self, rest):
-        self.rest = rest
-
-
-async def test_tracker_posts_and_finalizes(store):
-    rest = FakeRest()
-    sent, edits = [], []
-
-    async def send_message(cid, payload):
-        sent.append(payload)
-        return {"id": "1"}
-
-    async def edit_message(cid, mid, payload):
-        edits.append(payload)
-
-    rest.send_message, rest.edit_message = send_message, edit_message
-    vault = Vault(_Link(rest), store)
-    job = vault.export(GUILD, ExportOptions())
-
-    Tracker(rest).follow(job, TEXT)
-    await job.task
-    for _ in range(5):
-        await asyncio.sleep(0)
-
-    assert sent
-    assert edits[-1]["embeds"][0]["footer"]["text"] == "done"
-
-
-async def test_slash_commands_register(store, tmp_path):
-    client = discord.Client(intents=discord.Intents.none())
-    tree = app_commands.CommandTree(client)
-    register(tree, Vault(_Link(FakeRest()), store), Tracker(FakeRest()), tmp_path)
-
-    group = tree.get_command("vault")
-    names = sorted(c.name for c in group.commands)
-    payload = group.to_dict(tree)
-
-    assert names == ["cancel", "export", "import", "jobs", "progress", "stats", "watch"]
-    export = next(o for o in payload["options"] if o["name"] == "export")
-    media = next(o for o in export["options"] if o["name"] == "media")
-    assert {c["value"] for c in media["choices"]} == {"skip", "download"}

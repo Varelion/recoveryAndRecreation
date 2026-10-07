@@ -13,7 +13,6 @@ from vault.services.watcher import Watcher
 from vault.store import Store
 
 EXPORT, IMPORT, WATCH = "export", "import", "watch"
-WATCH_FLAG = "watch"  # cursor scope remembering active watches across restarts
 
 
 class Vault:
@@ -33,21 +32,9 @@ class Vault:
         return self.jobs.start(IMPORT, target, by, progress, work)
 
     async def watch(self, guild_id: int, by: int | None = None) -> Job:
-        """Record live events; remembered so a restarted bot resumes it."""
+        """Record live events."""
         progress = Progress(WATCH)
-        job = self.jobs.start(WATCH, guild_id, by, progress, Watcher(self._link, self._store, guild_id, progress).run())
-        await self._store.set_cursor(WATCH_FLAG, guild_id, 1)
-        await self._store.commit()
-        return job
-
-    async def unwatch(self, guild_id: int) -> bool:
-        await self._store.set_cursor(WATCH_FLAG, guild_id, 0)
-        await self._store.commit()
-        job = self.jobs.running(WATCH, guild_id)
-        return bool(job) and self.jobs.cancel(job.id)
-
-    async def resume_watches(self) -> list[Job]:
-        return [await self.watch(g) for g in await self._store.flagged(WATCH_FLAG)]
+        return self.jobs.start(WATCH, guild_id, by, progress, Watcher(self._link, self._store, guild_id, progress).run())
 
     async def known(self, guild_id: int) -> bool:
         return await self._store.raw("guild", guild_id) is not None
