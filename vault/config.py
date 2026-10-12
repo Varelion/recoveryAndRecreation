@@ -31,6 +31,8 @@ REACTION_PAGE = 100
 
 # Discord message limits (spec).
 CONTENT_LIMIT = 2000
+EMBED_TITLE_LIMIT = 256
+EMBED_TEXT_LIMIT = 4096
 EMBED_LIMIT = 10
 WEBHOOK_NAME_LIMIT = 80
 
@@ -96,3 +98,8 @@ class Messages(Enum):
 class Mode(Enum):
     LIVE = "live"
     DRY_RUN = "dry-run"
+
+
+class Prune(Enum):
+    KEEP = "keep"
+    DELETE = "delete"

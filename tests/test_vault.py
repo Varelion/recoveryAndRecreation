@@ -2,13 +2,15 @@ import pytest
 
 from fakes import GUILD, POST, ROLE, TEXT, USER, FakeRest, message
 from vault import config
-from vault.config import Mode
+from vault.config import Messages, Mode
 from vault.services.exporter import ExportOptions, Exporter
 from vault.services.importer import ImportOptions, Importer, _content
 from vault.services.watcher import Watcher
 from vault.store import Store
 
 TARGET = 5000
+TARGET_FORUM = 5001
+TARGET_TEXT = 5002
 
 
 @pytest.fixture
@@ -158,6 +160,68 @@ async def test_import_dry_run_writes_nothing(store):
 
     assert stats["channels"] == 2 and stats["messages"] == 1
     assert rest.calls == []
+
+
+async def test_import_skips_emojis_over_cap(store):
+    rest = FakeRest()
+    rest.emojis_data = [{"id": "70", "name": "a"}, {"id": "71", "name": "b"}]
+    rest.emoji_slots = 1
+    rest.msgs[TEXT] = [message(100, TEXT)]
+    await export(rest, store)
+
+    # Guild emoji cap (HTTP 400) must not abort the import.
+    stats = await Importer(rest, store, GUILD, TARGET, ImportOptions()).run()
+
+    assert ("create_emoji", "a") in rest.calls
+    assert stats["messages"] == 1
+
+
+async def test_import_drops_role_icon_unboosted(store):
+    rest = FakeRest()
+    rest.roles_data[1]["unicode_emoji"] = "⚡"
+    rest.role_icons = False
+    await export(rest, store)
+
+    # Role icons need boosts: role is still created, without icon.
+    await Importer(rest, store, GUILD, TARGET, ImportOptions(messages=Messages.SKIP)).run()
+
+    assert ("create_role", "mod") in rest.calls
+
+
+async def test_import_into_forum_as_posts(store):
+    rest = FakeRest()
+    rest.msgs[TEXT] = [message(100, TEXT)]
+    rest.msgs[POST] = [message(300, POST)]
+    await export(rest, store)
+    rest.calls.clear()
+    rest.target_types[TARGET_FORUM] = 15
+
+    # Channel and thread each open a post; nothing else is built.
+    options = ImportOptions(channels={TEXT, POST}, into=TARGET_FORUM)
+    stats = await Importer(rest, store, GUILD, TARGET, options).run()
+
+    assert stats["messages"] == 2
+    assert [c[3] for c in rest.calls if c[0] == "send"] == ["general", "post"]
+    assert not [c for c in rest.calls if c[0] in ("create_channel", "create_role", "create_thread")]
+
+    # Re-run: nothing duplicated.
+    rest.calls.clear()
+    again = await Importer(rest, store, GUILD, TARGET, options).run()
+    assert not again.get("messages")
+    assert not [c for c in rest.calls if c[0] == "send"]
+
+
+async def test_import_into_text_as_threads(store):
+    rest = FakeRest()
+    rest.msgs[TEXT] = [message(100, TEXT)]
+    await export(rest, store)
+    rest.calls.clear()
+    rest.target_types[TARGET_TEXT] = 0
+
+    options = ImportOptions(channels={TEXT}, into=TARGET_TEXT)
+    await Importer(rest, store, GUILD, TARGET, options).run()
+
+    assert ("create_thread", TARGET_TEXT, "general") in rest.calls
 
 
 def test_content_fits_limit():

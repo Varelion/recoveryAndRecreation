@@ -1,4 +1,6 @@
 import asyncio
+import io
+import sys
 
 import pytest
 
@@ -8,6 +10,8 @@ from vault.services.jobs import Busy, Jobs
 from vault.services.progress import Progress, Status
 from vault.store import Store
 from vault.ui import render
+from vault.ui import console
+from vault.ui.console import follow
 
 
 @pytest.fixture
@@ -98,3 +102,17 @@ async def test_export_progress_reaches_full(store):
     assert seen and seen[-1] == pytest.approx(1.0)
     assert progress.counters["messages_seen"] == 3
 
+
+async def test_console_survives_cp1252(monkeypatch):
+    # Windows consoles default to cp1252: no bar glyphs, no emoji channel names.
+    raw = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(raw, encoding="cp1252"))
+    monkeypatch.setattr(console, "PRINT_INTERVAL", 0.01)
+    progress = Progress("x", {"a": 1})
+    progress.phase("a", 2)
+    progress.detail("#🏰cult")
+
+    await follow(Jobs().start("x", GUILD, None, progress, asyncio.sleep(0.1)))
+    sys.stdout.flush()
+
+    assert "🏰" in raw.getvalue().decode("utf-8")

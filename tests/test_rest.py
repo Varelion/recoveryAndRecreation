@@ -1,10 +1,12 @@
 import aiohttp
+import discord
 import pytest
 
 from vault import config
 from vault.api.rest import Rest
 
 WIN_NETNAME_DELETED = 64
+HTTP_SERVICE_UNAVAILABLE = 503
 
 
 class FlakyHttp:
@@ -20,6 +22,23 @@ class FlakyHttp:
             raise aiohttp.ClientOSError(WIN_NETNAME_DELETED, "The specified network name is no longer available")
 
         return []
+
+
+class OutageHttp(FlakyHttp):
+    """HTTPClient stand-in: Discord answers 503 `drops` times, then answers."""
+
+    async def request(self, route, **kwargs):
+        self.calls += 1
+        if self.calls <= self.drops:
+            raise discord.DiscordServerError(FakeResponse(HTTP_SERVICE_UNAVAILABLE), "")
+
+        return []
+
+
+class FakeResponse:
+    def __init__(self, status: int) -> None:
+        self.status = status
+        self.reason = "Service Unavailable"
 
 
 @pytest.fixture(autouse=True)
@@ -46,6 +65,23 @@ async def test_write_not_retried():
     http = FlakyHttp(drops=1)
 
     with pytest.raises(aiohttp.ClientOSError):
+        await Rest(http).send_message(1, {"content": "x"})
+
+    assert http.calls == 1
+
+
+async def test_read_survives_server_outage():
+    # discord.py gives up on 5xx after a few seconds; outages last longer.
+    http = OutageHttp(drops=2)
+
+    assert await Rest(http).channels(1) == []
+    assert http.calls == 3
+
+
+async def test_write_not_retried_on_outage():
+    http = OutageHttp(drops=1)
+
+    with pytest.raises(discord.DiscordServerError):
         await Rest(http).send_message(1, {"content": "x"})
 
     assert http.calls == 1

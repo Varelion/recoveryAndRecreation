@@ -389,6 +389,16 @@ class Store:
         )
         return row[0]
 
+    async def own_counts(self, target_guild: int, channel_id: int) -> tuple[int, int]:
+        """(live, imported into target_guild) messages of one channel, its threads excluded."""
+        row = await self._one(
+            "SELECT count(*) AS live, count(x.source_id) AS done FROM messages m LEFT JOIN import_map x "
+            "ON x.source_id = m.message_id AND x.target_guild = ? AND x.kind = 'message' "
+            "WHERE m.channel_id = ? AND m.gone_at IS NULL",
+            (target_guild, channel_id),
+        )
+        return row["live"], row["done"]
+
     async def media_path(self, attachment_id: int) -> str | None:
         row = await self._one(
             "SELECT m.path FROM attachments a JOIN media m ON m.sha256 = a.sha256 WHERE a.attachment_id = ?",
@@ -417,6 +427,59 @@ class Store:
             (target_guild, channel_id),
         )
         return row["last"] or 0
+
+    # ------------------------------------------------------------ build
+
+    async def built(self, guild_id: int, key: str) -> aiosqlite.Row | None:
+        return await self._one(
+            "SELECT target_id, digest FROM build_map WHERE guild_id = ? AND key = ?", (guild_id, key)
+        )
+
+    async def mark_built(self, guild_id: int, key: str, target_id: int, digest: str | None = None) -> None:
+        await self._db.execute(
+            "INSERT OR REPLACE INTO build_map VALUES (?, ?, ?, ?)", (guild_id, key, target_id, digest)
+        )
+        await self._db.commit()
+
+    async def unbuild(self, guild_id: int, key: str) -> None:
+        await self._db.execute("DELETE FROM build_map WHERE guild_id = ? AND key = ?", (guild_id, key))
+        await self._db.commit()
+
+    async def built_under(self, guild_id: int, prefix: str) -> list[aiosqlite.Row]:
+        """Rows whose key starts with `prefix`, compared literally (no LIKE wildcards)."""
+        return await self._all(
+            "SELECT key, target_id FROM build_map WHERE guild_id = ? AND substr(key, 1, ?) = ?",
+            (guild_id, len(prefix), prefix),
+        )
+
+    async def unbuild_under(self, guild_id: int, prefix: str) -> None:
+        await self._db.execute(
+            "DELETE FROM build_map WHERE guild_id = ? AND substr(key, 1, ?) = ?", (guild_id, len(prefix), prefix)
+        )
+        await self._db.commit()
+
+    # ------------------------------------------------------------ user lookup
+
+    async def find_user(self, query: str) -> int | None:
+        """User id from an id, username, global name or nickname (case-insensitive)."""
+        if query.isdigit():
+            row = await self._one("SELECT user_id FROM users WHERE user_id = ?", (int(query),))
+            return row["user_id"] if row else None
+
+        row = await self._one(
+            "SELECT user_id FROM users WHERE lower(username) = lower(?) OR lower(global_name) = lower(?) "
+            "UNION SELECT user_id FROM members WHERE lower(nick) = lower(?) LIMIT 1",
+            (query, query, query),
+        )
+        return row["user_id"] if row else None
+
+    async def user_texts(self, user_id: int) -> list[str]:
+        """Text of every message the user wrote, deleted ones included (moderation evidence)."""
+        rows = await self._all(
+            "SELECT content FROM messages WHERE author_id = ? AND content IS NOT NULL AND content != ''",
+            (user_id,),
+        )
+        return [r["content"] for r in rows]
 
     # ------------------------------------------------------------ dump & stats
 

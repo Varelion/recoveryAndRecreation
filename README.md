@@ -35,9 +35,10 @@ Bot, in the Developer Portal:
 ## Commands
 
 ```
-python -m vault export <guild> [--media] [--reaction-users] [--rescan-days N] [--channel ID]...
+python -m vault export <guild> [--no-media] [--no-reaction-users] [--rescan-days N] [--channel ID]...
 python -m vault watch  <guild> [--no-catch-up] [export flags]
-python -m vault import <source> <target> [--dry-run] [--skip-messages] [--channel ID]...
+python -m vault import <source> <target> [--dry-run] [--skip-messages] [--channel ID]... [--into ID]
+python -m vault build  <guild> <blueprint-dir> [--dry-run] [--prune-roles] [--prune-channels]
 python -m vault dump --out dir [--format csv|jsonl]
 python -m vault stats [--guild ID]
 ```
@@ -84,11 +85,21 @@ the tables for pandas, DuckDB or spreadsheets.
 - Webhooks show original name and avatar but cannot backdate; the original time
   is appended as a subtext line.
 - Reactions, polls, stickers and component buttons are not replayed.
-- Attachments come from `--media` downloads; otherwise the stored CDN link is
+- Attachments come from media downloads (skipped by `--no-media`); otherwise the stored CDN link is
   tried and usually has expired.
 - Forum/announcement/stage channels need a Community guild; they fall back to
   text/voice otherwise.
 - Resumable: every created object is recorded in `import_map`; re-running continues.
+
+## Build
+
+`build` converges a guild onto a blueprint (`server.toml` + markdown docs, see
+`blueprints/courts_unbound`). Re-running edits only what changed; docs are
+re-synced message by message. Roles absent from the blueprint are deleted only
+with `--prune-roles`; channels the build made and the blueprint dropped (or
+replaced, since Discord cannot change a channel's type) only with
+`--prune-channels`. Channels the build never made are never touched. The bot's
+role must sit above every role it edits or deletes.
 
 ## Tests
 

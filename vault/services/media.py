@@ -8,7 +8,7 @@ import hashlib
 import logging
 from pathlib import Path
 
-from vault.api import Denied, Missing, Rest
+from vault.api import Denied, Missing, Rejected, Rest, Unavailable
 from vault.services.progress import Progress
 from vault.store import Store
 
@@ -43,9 +43,13 @@ class Downloader:
         async with self._gate:
             try:
                 data = await self._rest.cdn(url)
-            except (Missing, Denied):
+            except (Missing, Denied, Rejected):
                 # Signed CDN links expire; a later export refreshes them.
                 log.warning("Media gone: %s", url)
+                return 0
+            except Unavailable:
+                # Stays pending; a later export retries it.
+                log.warning("Media unreachable: %s", url)
                 return 0
 
         sha = hashlib.sha256(data).hexdigest()

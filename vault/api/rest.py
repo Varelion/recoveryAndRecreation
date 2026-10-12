@@ -22,10 +22,12 @@ log = logging.getLogger(__name__)
 
 _BODY_KEYS = ("json", "form", "reason")
 HTTP_BAD_REQUEST = 400
+HTTP_SERVER_ERROR = 500
 SAFE_METHOD = "GET"
 
-# Connection lost before a response; the request may never have arrived.
-_NET_ERRORS = (aiohttp.ClientConnectionError, asyncio.TimeoutError)
+# Connection lost before a response, or Discord outage (5xx) outlasting
+# discord.py's own short retry loop.
+_NET_ERRORS = (aiohttp.ClientConnectionError, asyncio.TimeoutError, discord.DiscordServerError)
 
 
 class Denied(Exception):
@@ -38,6 +40,10 @@ class Missing(Exception):
 
 class Rejected(Exception):
     """Request refused as invalid (HTTP 400), e.g. feature not enabled."""
+
+
+class Unavailable(Exception):
+    """Server still failing (HTTP 5xx or network) after all retries."""
 
 
 class Rest:
@@ -66,7 +72,7 @@ class Rest:
             raise Rejected(f"{method} {path}: {exc.text}") from exc
 
     async def _request(self, route: Route, query: Json, body: Json) -> Any:
-        # Retry reads across network drops (e.g. WinError 64); writes are
+        # Retry reads across network drops (e.g. WinError 64) and 503s; writes are
         # not retried since the server may have applied them already.
         delay = config.NET_RETRY_DELAY
         for _ in range(config.NET_RETRIES):
@@ -84,12 +90,43 @@ class Rest:
         return await self._http.request(route, params=query, **body)
 
     async def cdn(self, url: str) -> bytes:
+        # CDN reports outages (e.g. 504) as plain HTTPException; retry like reads.
+        delay = config.NET_RETRY_DELAY
+        for _ in range(config.NET_RETRIES):
+            try:
+                return await self._asset(url)
+            except _NET_ERRORS as exc:
+                log.warning("CDN %s: %r, retrying in %.0fs", url, exc, delay)
+            except discord.HTTPException as exc:
+                if exc.status < HTTP_SERVER_ERROR:
+                    raise
+
+                log.warning("CDN %s: %r, retrying in %.0fs", url, exc, delay)
+
+            await asyncio.sleep(delay)
+            delay *= 2
+
+        try:
+            return await self._asset(url)
+        except _NET_ERRORS as exc:
+            raise Unavailable(url) from exc
+        except discord.HTTPException as exc:
+            if exc.status < HTTP_SERVER_ERROR:
+                raise
+
+            raise Unavailable(url) from exc
+
+    async def _asset(self, url: str) -> bytes:
         try:
             return await self._http.get_from_cdn(url)
         except discord.NotFound as exc:
             raise Missing(url) from exc
         except discord.Forbidden as exc:
             raise Denied(url) from exc
+        except discord.HTTPException as exc:
+            if exc.status != HTTP_BAD_REQUEST:
+                raise
+            raise Rejected(url) from exc
 
     # ------------------------------------------------------------ guild
 
@@ -99,11 +136,19 @@ class Rest:
     async def guild(self, guild_id: int) -> Json:
         return await self._call("GET", "/guilds/{guild_id}", guild_id=guild_id, params={"with_counts": "true"})
 
+    async def channel(self, channel_id: int) -> Json:
+        return await self._call("GET", "/channels/{channel_id}", channel_id=channel_id)
+
     async def channels(self, guild_id: int) -> list[Json]:
         return await self._call("GET", "/guilds/{guild_id}/channels", guild_id=guild_id)
 
     async def roles(self, guild_id: int) -> list[Json]:
         return await self._call("GET", "/guilds/{guild_id}/roles", guild_id=guild_id)
+
+    async def member(self, guild_id: int, user_id: int) -> Json:
+        return await self._call(
+            "GET", "/guilds/{guild_id}/members/{user_id}", guild_id=guild_id, user_id=user_id
+        )
 
     async def emojis(self, guild_id: int) -> list[Json]:
         return await self._call("GET", "/guilds/{guild_id}/emojis", guild_id=guild_id)
@@ -241,8 +286,14 @@ class Rest:
 
     # ------------------------------------------------------------ writes
 
+    async def edit_guild(self, guild_id: int, payload: Json) -> Json:
+        return await self._call("PATCH", "/guilds/{guild_id}", guild_id=guild_id, json=payload)
+
     async def create_role(self, guild_id: int, payload: Json) -> Json:
         return await self._call("POST", "/guilds/{guild_id}/roles", guild_id=guild_id, json=payload)
+
+    async def delete_role(self, guild_id: int, role_id: int) -> None:
+        await self._call("DELETE", "/guilds/{guild_id}/roles/{role_id}", guild_id=guild_id, role_id=role_id)
 
     async def edit_role(self, guild_id: int, role_id: int, payload: Json) -> Json:
         return await self._call(
@@ -254,6 +305,22 @@ class Rest:
 
     async def create_channel(self, guild_id: int, payload: Json) -> Json:
         return await self._call("POST", "/guilds/{guild_id}/channels", guild_id=guild_id, json=payload)
+
+    async def edit_channel(self, channel_id: int, payload: Json) -> Json:
+        return await self._call("PATCH", "/channels/{channel_id}", channel_id=channel_id, json=payload)
+
+    async def delete_channel(self, channel_id: int) -> None:
+        await self._call("DELETE", "/channels/{channel_id}", channel_id=channel_id)
+
+    async def order_channels(self, guild_id: int, positions: list[Json]) -> None:
+        await self._call("PATCH", "/guilds/{guild_id}/channels", guild_id=guild_id, json=positions)
+
+    async def create_post(self, forum_id: int, name: str, message: Json, tags: list[int]) -> Json:
+        """Forum post (thread + opening message). Returns the thread; its id is the opening message id."""
+        return await self._call(
+            "POST", "/channels/{channel_id}/threads", channel_id=forum_id,
+            json={"name": name, "message": message, "applied_tags": [str(t) for t in tags]},
+        )
 
     async def create_thread(self, channel_id: int, name: str) -> Json:
         """Public thread without a starter message."""
@@ -295,6 +362,11 @@ class Rest:
         return await self._call(
             "PATCH", "/channels/{channel_id}/messages/{message_id}",
             channel_id=channel_id, message_id=message_id, json=payload,
+        )
+
+    async def delete_message(self, channel_id: int, message_id: int) -> None:
+        await self._call(
+            "DELETE", "/channels/{channel_id}/messages/{message_id}", channel_id=channel_id, message_id=message_id
         )
 
     async def pin(self, channel_id: int, message_id: int) -> None:

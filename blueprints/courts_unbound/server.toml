@@ -1,0 +1,1181 @@
+# Courts Unbound — ACOTAR AU play-by-post (TWF system, FFJ procedures, wodSouls market & sagas).
+#
+#   python -m vault build 1458172912426287126 blueprints/courts_unbound --dry-run --prune-roles
+#
+# Words in presets map to Discord permissions (vault/services/blueprint.py, Permission).
+# In forums "send" creates posts and "send_in_threads" replies inside them.
+# Docs use {#channel-id} for channel links and {@Role} for role mentions; posts never ping.
+
+[server]
+name = "ACOTAR: Courts Unbound"
+
+# ---------------------------------------------------------------- access presets
+
+# Readable before any role is given: rules, getting started, the encyclopedia.
+[presets.public]
+"@everyone" = { allow = ["view", "history", "react"], deny = ["send", "send_in_threads", "create_public_threads", "create_private_threads"] }
+"Staff" = { allow = ["send", "send_in_threads", "embed", "attach", "manage_messages"] }
+"Bots" = { allow = ["send", "embed", "attach", "manage_messages"] }
+
+# Members read; staff and storytellers post.
+[presets.notices]
+"@everyone" = { deny = ["view"] }
+"New Arrival" = { allow = ["view", "history", "react"], deny = ["send", "send_in_threads", "create_public_threads", "create_private_threads"] }
+"Member" = { allow = ["view", "history", "react"], deny = ["send", "send_in_threads", "create_public_threads", "create_private_threads"] }
+"Spectator" = { allow = ["view", "history", "react"], deny = ["send", "send_in_threads", "create_public_threads", "create_private_threads"] }
+"Approved Player" = { allow = ["view", "history", "react"], deny = ["send", "send_in_threads", "create_public_threads", "create_private_threads"] }
+"Storyteller" = { allow = ["view", "history", "send", "embed", "attach"] }
+"Staff" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach", "manage_messages", "mention_everyone"] }
+"Bots" = { allow = ["view", "history", "send", "embed", "attach"] }
+
+# New arrivals wait here for review.
+[presets.intake]
+"@everyone" = { deny = ["view"] }
+"New Arrival" = { allow = ["view", "history", "send", "react"] }
+"Staff" = { allow = ["view", "history", "send", "manage_messages"] }
+"Bots" = { allow = ["view", "history", "send", "embed"] }
+
+# Forums where accepted members and players open their own posts (character profiles).
+# New arrivals read until their application is accepted.
+[presets.applicants]
+"@everyone" = { deny = ["view"] }
+"New Arrival" = { allow = ["view", "history"], deny = ["send", "send_in_threads"] }
+"Member" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach", "react"] }
+"Approved Player" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach", "react"] }
+"Spectator" = { allow = ["view", "history"], deny = ["send", "send_in_threads"] }
+"Staff" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach", "manage_messages", "manage_threads"] }
+"Bots" = { allow = ["view", "history", "send", "send_in_threads", "embed"] }
+
+# Forums where approved players open posts (ledgers, plotters, purses, sagas).
+[presets.player-forum]
+"@everyone" = { deny = ["view"] }
+"New Arrival" = { allow = ["view", "history"], deny = ["send", "send_in_threads"] }
+"Member" = { allow = ["view", "history"], deny = ["send", "send_in_threads"] }
+"Spectator" = { allow = ["view", "history"], deny = ["send", "send_in_threads"] }
+"Approved Player" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach", "react"] }
+"Storyteller" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach"] }
+"Staff" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach", "manage_messages", "manage_threads"] }
+"Bots" = { allow = ["view", "history", "send", "send_in_threads", "embed"] }
+
+# Staff and storytellers open posts; accepted members reply inside them (claims, missions).
+[presets.registers]
+"@everyone" = { deny = ["view"] }
+"New Arrival" = { allow = ["view", "history"], deny = ["send", "send_in_threads"] }
+"Member" = { allow = ["view", "history", "send_in_threads", "react"], deny = ["send"] }
+"Approved Player" = { allow = ["view", "history", "send_in_threads", "embed", "attach", "react"], deny = ["send"] }
+"Spectator" = { allow = ["view", "history"], deny = ["send", "send_in_threads"] }
+"Storyteller" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach"] }
+"Staff" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach", "manage_messages", "manage_threads"] }
+"Bots" = { allow = ["view", "history", "send", "send_in_threads", "embed"] }
+
+# In-character locations.
+[presets.rp]
+"@everyone" = { deny = ["view"] }
+"Approved Player" = { allow = ["view", "history", "send", "send_in_threads", "create_public_threads", "create_private_threads", "embed", "attach", "react"] }
+"Spectator" = { allow = ["view", "history", "react"], deny = ["send", "send_in_threads", "create_public_threads", "create_private_threads"] }
+"Storyteller" = { allow = ["view", "history", "send", "send_in_threads", "create_public_threads", "create_private_threads", "embed", "attach", "manage_threads"] }
+"Staff" = { allow = ["view", "history", "send", "send_in_threads", "create_public_threads", "create_private_threads", "embed", "attach", "manage_messages", "manage_threads"] }
+"Bots" = { allow = ["view", "history", "send", "send_in_threads", "embed"] }
+
+# Approved players post, spectators read (grading inbox, trading, travel, looking for RP).
+[presets.players]
+"@everyone" = { deny = ["view"] }
+"Approved Player" = { allow = ["view", "history", "send", "send_in_threads", "create_public_threads", "embed", "attach", "react"] }
+"Spectator" = { allow = ["view", "history", "react"], deny = ["send", "send_in_threads", "create_public_threads"] }
+"Storyteller" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach"] }
+"Staff" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach", "manage_messages", "manage_threads"] }
+"Bots" = { allow = ["view", "history", "send", "embed"] }
+
+# Everyone with a role chats, voice included.
+[presets.ooc]
+"@everyone" = { deny = ["view"] }
+"New Arrival" = { allow = ["view", "history", "send", "send_in_threads", "create_public_threads", "embed", "attach", "react", "connect", "speak"] }
+"Member" = { allow = ["view", "history", "send", "send_in_threads", "create_public_threads", "embed", "attach", "react", "connect", "speak"] }
+"Spectator" = { allow = ["view", "history", "send", "send_in_threads", "create_public_threads", "embed", "attach", "react", "connect", "speak"] }
+"Approved Player" = { allow = ["view", "history", "send", "send_in_threads", "create_public_threads", "embed", "attach", "react", "connect", "speak"] }
+"Staff" = { allow = ["view", "history", "send", "send_in_threads", "create_public_threads", "embed", "attach", "react", "connect", "speak", "manage_messages", "manage_threads"] }
+"Bots" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach", "connect", "speak"] }
+
+# One allegiance's private hall; each channel grants its allegiance role.
+[presets.court-hall]
+"@everyone" = { deny = ["view"] }
+"$grant" = { allow = ["view", "history", "send", "send_in_threads", "create_public_threads", "embed", "attach", "react"] }
+"Staff" = { allow = ["view", "history", "send", "manage_messages", "manage_threads"] }
+
+# 21+ opt-in: NSFW Romance holders open private threads; nothing is posted in the channel itself.
+[presets.mature]
+"@everyone" = { deny = ["view"] }
+"NSFW Romance" = { allow = ["view", "history", "create_private_threads", "send_in_threads", "embed", "attach", "react"], deny = ["send", "create_public_threads"] }
+"Staff" = { allow = ["view", "history", "send", "send_in_threads", "manage_messages", "manage_threads"] }
+
+# Staff only; a channel may grant one more role (storytellers in the story workshop).
+[presets.staff]
+"@everyone" = { deny = ["view"] }
+"Staff" = { allow = ["view", "history", "send", "send_in_threads", "create_public_threads", "create_private_threads", "embed", "attach", "react", "connect", "speak", "manage_messages", "manage_threads"] }
+"Bots" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach"] }
+"$grant" = { allow = ["view", "history", "send", "send_in_threads", "embed", "attach", "react"] }
+
+# Read-only history.
+[presets.archive]
+"@everyone" = { deny = ["view"] }
+"Approved Player" = { allow = ["view", "history"], deny = ["send", "send_in_threads", "create_public_threads", "create_private_threads"] }
+"Spectator" = { allow = ["view", "history"], deny = ["send", "send_in_threads", "create_public_threads", "create_private_threads"] }
+"Staff" = { allow = ["view", "history", "send", "send_in_threads", "manage_messages", "manage_threads"] }
+
+# The archive, closed to every role as staff set it on Discord; people opened to it keep their own overwrites.
+[presets.archive-hidden]
+"@everyone" = { deny = ["view"] }
+"Approved Player" = { allow = ["history"], deny = ["view", "send", "send_in_threads", "create_public_threads", "create_private_threads"] }
+"Spectator" = { allow = ["history"], deny = ["view", "send", "send_in_threads", "create_public_threads", "create_private_threads"] }
+"Staff" = { allow = ["history", "send", "send_in_threads", "manage_messages", "manage_threads"], deny = ["view"] }
+
+# ---------------------------------------------------------------- roles (top → bottom)
+
+[[role]]
+name = "High Council"
+color = 0xC9A227
+hoist = true
+permissions = ["kick", "ban", "moderate", "manage_messages", "manage_threads", "manage_nicknames", "manage_roles", "manage_channels", "manage_guild", "mention_everyone"]
+
+[[role]]
+name = "Moderator"
+color = 0x7E57C2
+hoist = true
+
+[[role]]
+name = "Lorekeeper"
+color = 0x5C9EAD
+hoist = true
+permissions = ["manage_messages", "manage_threads", "manage_nicknames"]
+
+[[role]]
+name = "Storyteller"
+color = 0xE07A5F
+hoist = true
+
+[[role]]
+name = "Staff"
+
+[[role]]
+name = "Bots"
+
+# Titles carry no color, so the allegiance color shows.
+[[role]]
+name = "High Lord / Lady"
+
+[[role]]
+name = "Inner Circle"
+
+[[role]]
+name = "House Head"
+
+[[role]]
+name = "Master"
+
+[[role]]
+name = "Shard-bearer"
+
+[[role]]
+name = "Night Court"
+color = 0x6A5ACD
+hoist = true
+
+[[role]]
+name = "Day Court"
+color = 0xF2C14E
+hoist = true
+
+[[role]]
+name = "Dawn Court"
+color = 0xF4A582
+hoist = true
+
+[[role]]
+name = "Spring Court"
+color = 0x8BC34A
+hoist = true
+
+[[role]]
+name = "Summer Court"
+color = 0x26A69A
+hoist = true
+
+[[role]]
+name = "Autumn Court"
+color = 0xD9652B
+hoist = true
+
+[[role]]
+name = "Winter Court"
+color = 0xA8D8F0
+hoist = true
+
+[[role]]
+name = "Courtless"
+color = 0x9AA0A6
+hoist = true
+
+[[role]]
+name = "Outlaw"
+color = 0x8B1E2D
+hoist = true
+
+[[role]]
+name = "TIER 5"
+
+[[role]]
+name = "TIER 4"
+
+[[role]]
+name = "TIER 3"
+
+[[role]]
+name = "TIER 2"
+
+[[role]]
+name = "TIER 1"
+
+[[role]]
+name = "Approved Player"
+
+[[role]]
+name = "Member"
+
+[[role]]
+name = "Spectator"
+
+[[role]]
+name = "New Arrival"
+
+[[role]]
+name = "Plot Seeker"
+mentionable = true
+
+[[role]]
+name = "Adventure Seeker"
+mentionable = true
+
+[[role]]
+name = "PVP Fiend"
+mentionable = true
+
+[[role]]
+name = "Event Ping"
+mentionable = true
+
+[[role]]
+name = "Saga Ping"
+mentionable = true
+
+[[role]]
+name = "SFW Romance"
+
+[[role]]
+name = "Platonic Only"
+
+[[role]]
+name = "NSFW Romance"
+
+# ---------------------------------------------------------------- threshold
+
+[[category]]
+id = "threshold"
+name = "✦ THRESHOLD"
+access = "public"
+
+[[category.channel]]
+id = "getting-started"
+name = "📍getting-started"
+topic = "New here? Start with these steps, in order."
+docs = ["docs/getting-started.md", "docs/rp-workflow-tips.md"]
+
+[[category.channel]]
+id = "rules"
+name = "📕rules"
+adopt = 1556486499531358268
+topic = "Server rules. Read them before anything else; staff rulings are final."
+docs = ["docs/rules.md"]
+
+[[category.channel]]
+id = "encyclopedia"
+name = "📖encyclopedia"
+type = "forum"
+topic = "How Courts Unbound plays, one page per post. Questions go to ask-staff."
+
+# Last page first: the forum shows the newest post on top, so 00 leads.
+
+[[category.channel.thread]]
+id = "sagas-guide"
+title = "🌀 11 · Sagas"
+doc = "docs/11-sagas.md"
+
+[[category.channel.thread]]
+id = "market-guide"
+title = "🛒 10 · Market"
+doc = "docs/10-market.md"
+
+[[category.channel.thread]]
+id = "creation"
+title = "📗 09 · Character Creation"
+doc = "docs/09-character-creation.md"
+
+[[category.channel.thread]]
+id = "claims-guide"
+title = "📌 08 · Claims"
+doc = "docs/08-claims.md"
+
+[[category.channel.thread]]
+id = "missions-guide"
+title = "🗺️ 07 · Missions"
+doc = "docs/07-missions.md"
+
+[[category.channel.thread]]
+id = "combat"
+title = "🗡️ 06 · Combat"
+doc = "docs/06-combat.md"
+
+[[category.channel.thread]]
+id = "renown"
+title = "🌟 05 · Renown, Bounty & Marks"
+doc = "docs/05-renown-and-marks.md"
+
+[[category.channel.thread]]
+id = "progression"
+title = "📈 04 · Progression"
+doc = "docs/04-progression.md"
+
+[[category.channel.thread]]
+id = "abilities"
+title = "✨ 03 · Abilities"
+doc = "docs/03-abilities.md"
+
+[[category.channel.thread]]
+id = "ranks"
+title = "👑 02 · Ranks"
+doc = "docs/02-ranks.md"
+
+[[category.channel.thread]]
+id = "courts"
+title = "🏰 01 · Courts"
+doc = "docs/01-courts.md"
+
+[[category.channel.thread]]
+id = "setting"
+title = "📜 00 · Setting"
+doc = "docs/00-setting.md"
+
+[[category.channel]]
+id = "roles"
+name = "❗roles"
+topic = "Ping, romance and spectator roles you can give yourself."
+docs = ["docs/roles.md"]
+
+[[category.channel]]
+id = "waiting-room"
+name = "🔒waiting-room"
+access = "intake"
+topic = "Waiting on your application? Say hello here."
+docs = ["docs/waiting-room.md"]
+
+# ---------------------------------------------------------------- notices
+
+[[category]]
+id = "notices"
+name = "📯 NOTICES"
+access = "notices"
+
+[[category.channel]]
+id = "announcements"
+name = "📣announcements"
+type = "announcement"
+topic = "Server news from staff."
+
+[[category.channel]]
+id = "update-log"
+name = "📰update-log"
+topic = "Rule and system changes, dated."
+
+[[category.channel]]
+id = "court-gazette"
+name = "🗞️suriel-gossip-network"
+topic = "In-character news across Prythian. Something newsworthy happened? Tell staff in a ticket."
+
+[[category.channel]]
+id = "events"
+name = "🎉events"
+topic = "Site events, sagas starting and storyteller announcements."
+
+[[category.channel]]
+id = "graveyard"
+name = "🪦graveyard"
+topic = "The fallen. Each death is recorded with a link to the thread."
+
+[[category.channel]]
+id = "looking-for-rp"
+name = "👀looking-for-rp"
+access = "players"
+topic = "Find partners. Ping Plot Seeker, Adventure Seeker, PVP Fiend or Saga Ping."
+
+# ---------------------------------------------------------------- characters (TWF/FFJ boards)
+
+[[category]]
+id = "characters"
+name = "🎭 CHARACTERS"
+access = "player-forum"
+
+[[category.channel]]
+id = "character-profiles"
+name = "📒character-profiles"
+type = "forum"
+access = "applicants"
+topic = "One post per character, titled 'Last, First'. Copy the pinned template. Tag WIP, then Pending Review when done."
+tags = ["Night Court", "Day Court", "Dawn Court", "Spring Court", "Summer Court", "Autumn Court", "Winter Court", "Courtless", "Outlaw", "WIP", "Pending Review", "Approved", "Retired", "Deceased", "Template"]
+
+[[category.channel.thread]]
+title = "📜 Character Application Template"
+doc = "templates/application.md"
+tags = ["Template"]
+pin = true
+
+[[category.channel]]
+id = "upgrade-ledger"
+name = "📈upgrade-ledger"
+type = "forum"
+topic = "One ledger per approved character: every rank-up, new ability, purchase-boosted thread and profile change, with links."
+tags = ["Pending", "Approved", "Denied", "Template"]
+
+[[category.channel.thread]]
+title = "📈 Upgrade Ledger: Guide & Templates"
+doc = "templates/upgrade-ledger.md"
+tags = ["Template"]
+pin = true
+
+[[category.channel]]
+id = "plotters"
+name = "🗺️plotters"
+type = "forum"
+topic = "Plot pages: what your character wants, who they know, what threads they need."
+tags = ["Open", "Closed", "Template"]
+
+[[category.channel.thread]]
+title = "🗺️ Plotter Template"
+doc = "templates/plotter.md"
+tags = ["Template"]
+pin = true
+
+[[category.channel]]
+id = "houses"
+name = "🏛️houses-and-bloodlines"
+type = "forum"
+topic = "Custom houses and bloodlines (TWF customs). Staff approve before anyone plays them."
+tags = ["House", "Bloodline", "Pending", "Approved", "Template"]
+
+[[category.channel.thread]]
+title = "🏛️ House & Bloodline Submission Guide"
+doc = "templates/house.md"
+tags = ["Template"]
+pin = true
+
+[[category.channel]]
+id = "alliances"
+name = "🤝alliances"
+type = "forum"
+topic = "Player-made orders, companies, cabals and courts-within-courts."
+tags = ["Recruiting", "Closed", "Template"]
+
+[[category.channel.thread]]
+title = "🤝 Alliance Charter Template"
+doc = "templates/alliance.md"
+tags = ["Template"]
+pin = true
+
+[[category.channel]]
+id = "claims"
+name = "📌claims"
+type = "forum"
+access = "registers"
+topic = "Claim registers. Reply inside the right post with your request."
+tags = ["Rank", "Face", "Special", "Relic", "Register"]
+
+[[category.channel.thread]]
+title = "👑 Rank Claims"
+doc = "templates/rank-claims.md"
+tags = ["Rank", "Register"]
+pin = true
+
+[[category.channel.thread]]
+title = "🎭 Face Claims"
+doc = "templates/face-claims.md"
+tags = ["Face", "Register"]
+
+[[category.channel.thread]]
+title = "☠️ Special Claims"
+doc = "templates/special-claims.md"
+tags = ["Special", "Register"]
+
+[[category.channel.thread]]
+title = "🏺 Relic Claims"
+doc = "templates/relic-claims.md"
+tags = ["Relic", "Register"]
+
+# ---------------------------------------------------------------- out of character
+
+[[category]]
+id = "ooc"
+name = "💬 OUT OF CHARACTER"
+access = "ooc"
+
+[[category.channel]]
+id = "lounge"
+name = "🎤 Lounge"
+type = "voice"
+
+[[category.channel]]
+id = "general"
+name = "💬general"
+topic = "Talk about anything. Keep it kind; keep IC drama in character."
+
+[[category.channel]]
+id = "memes"
+name = "🤡memes"
+topic = "Memes."
+
+[[category.channel]]
+id = "after-dark"
+name = "🔞after-dark"
+access = "mature"
+nsfw = true
+topic = "21+, opt-in. Private threads only, between players who all hold NSFW Romance. Invite only those players."
+
+[[category.channel]]
+id = "introductions"
+name = "👋introductions"
+topic = "Tell us about you, the player."
+
+[[category.channel]]
+id = "birthdays"
+name = "🎂birthdays"
+topic = "Celebrate each other."
+
+[[category.channel]]
+id = "art"
+name = "🎨art"
+topic = "Your art, commissions and character pieces. Credit artists."
+
+[[category.channel]]
+id = "book-talk"
+name = "📚book-talk"
+topic = "ACOTAR and other books. Spoilers for recent releases go in spoilers."
+
+[[category.channel]]
+id = "spoilers"
+name = "🙈spoilers"
+topic = "Spoilers allowed. Say what you are spoiling before you spoil it."
+
+[[category.channel]]
+id = "starboard"
+name = "⭐starboard"
+topic = "The best posts, starred by everyone."
+
+# ---------------------------------------------------------------- missions & sagas (FFJ codex, wodSouls sagas)
+
+[[category]]
+id = "quests"
+name = "⚔️ MISSIONS & SAGAS"
+access = "players"
+
+[[category.channel]]
+id = "mission-board"
+name = "📜mission-board"
+type = "forum"
+access = "registers"
+topic = "Approved missions. Reply inside a mission to join; its GM updates the roster."
+tags = ["Errand", "Task", "Venture", "Peril", "Nightmare", "Open", "Full", "Done", "Guide"]
+
+[[category.channel.thread]]
+title = "📜 Mission Guidelines & Template"
+doc = "templates/mission.md"
+tags = ["Guide"]
+pin = true
+
+[[category.channel]]
+id = "saga-board"
+name = "🌀saga-board"
+type = "forum"
+access = "player-forum"
+topic = "Propose a saga or issue a challenge. Staff move proposals from Proposed to Approved."
+tags = ["Proposed", "Approved", "Active", "Concluded", "Challenge", "Guide"]
+
+[[category.channel.thread]]
+title = "🌀 Saga Proposal Template"
+doc = "templates/saga-proposal.md"
+tags = ["Guide"]
+pin = true
+
+[[category.channel.thread]]
+title = "⚔️ Challenge Template"
+doc = "templates/challenge.md"
+tags = ["Challenge", "Guide"]
+
+[[category.channel]]
+id = "thread-inbox"
+name = "📥thread-inbox"
+topic = "Finished a thread? Post it here for grading: Renown, Marks and progress credit."
+docs = ["docs/thread-inbox.md"]
+
+[[category.channel]]
+id = "ledger-log"
+name = "🧾ledger-log"
+access = "notices"
+topic = "Staff log of every Renown, Bounty, Marks and progress award."
+
+[[category.channel]]
+id = "chronicle"
+name = "📚chronicle"
+access = "notices"
+topic = "Concluded sagas, written up as chapters of Prythian's history."
+docs = ["docs/chronicle.md"]
+
+[[category.channel]]
+id = "shard-tracker"
+name = "🔮shard-tracker"
+access = "notices"
+topic = "Where the Seven Cauldron Shards are, and who holds them."
+docs = ["docs/shard-tracker.md"]
+
+# ---------------------------------------------------------------- market (wodSouls item shop)
+
+[[category]]
+id = "bazaar"
+name = "🛒 MARKET"
+access = "player-forum"
+
+[[category.channel]]
+id = "market"
+name = "🛒market"
+type = "forum"
+topic = "One purse per character: balance, purchases, sales. Staff confirm each line."
+tags = ["Purse", "Guide"]
+
+[[category.channel.thread]]
+title = "🛒 Purse Template"
+doc = "templates/purse.md"
+tags = ["Guide"]
+pin = true
+
+[[category.channel]]
+id = "retainers"
+name = "🐺retainers"
+type = "forum"
+topic = "Sheets for bought retainers and guards. Approved before they act."
+tags = ["Retainer", "Guard", "Pending", "Approved", "Guide"]
+
+[[category.channel.thread]]
+title = "🐺 Retainer & Guard Sheet"
+doc = "templates/retainer.md"
+tags = ["Guide"]
+pin = true
+
+[[category.channel]]
+id = "trading-post"
+name = "💱trading-post"
+access = "players"
+topic = "Player-to-player transfers of Marks or items. Link the in-character thread that justifies it."
+docs = ["docs/trading-post.md"]
+
+# ---------------------------------------------------------------- the seven courts
+# Every location is a forum, one post per scene. Death-enabled zones say so first in their guidelines.
+
+[[category]]
+id = "night-court"
+name = "🌙 NIGHT COURT"
+access = "rp"
+default_type = "forum"
+default_tags = ["Open", "Closed", "DE", "Mission", "Saga", "Challenge", "Finished"]
+
+[[category.channel]]
+id = "velaris"
+name = "velaris"
+topic = "The City of Starlight on the Sidra: markets, galleries, river-walks and quiet wealth hidden from the rest of Prythian."
+
+[[category.channel]]
+id = "rainbow-quarter"
+name = "rainbow-quarter"
+topic = "Velaris's artists' quarter: painted houses, studios, music halls and the people who never sleep."
+
+[[category.channel]]
+id = "house-of-wind"
+name = "house-of-wind"
+topic = "The Night Court's seat, carved into the mountain above Velaris. No stairs from the city. Visitors fly, winnow or climb ten thousand steps."
+
+[[category.channel]]
+id = "hewn-city"
+name = "hewn-city"
+topic = "The Court of Nightmares, deep inside the mountain. Old blood, older grudges, and a throne room where smiles are weapons."
+
+[[category.channel]]
+id = "illyrian-war-camps"
+name = "illyrian-war-camps"
+topic = "Windswept steppes and mountain camps of the Illyrian war-bands. Wings are clipped for less than an insult."
+
+[[category.channel]]
+id = "ramiel"
+name = "ramiel"
+topic = "Death-enabled zone. The sacred mountain, where the Blood Rite runs. The mountain does not care who climbs it."
+
+[[category]]
+id = "day-court"
+name = "☀️ DAY COURT"
+access = "rp"
+default_type = "forum"
+default_tags = ["Open", "Closed", "DE", "Mission", "Saga", "Challenge", "Finished"]
+
+[[category.channel]]
+id = "city-of-day"
+name = "city-of-day"
+topic = "The Day Court's capital: white stone, gold light, scholars and spies in equal number."
+
+[[category.channel]]
+id = "great-library"
+name = "great-library"
+topic = "The greatest library in Prythian. Some stacks are open. Some are warded. Some read you back."
+
+[[category.channel]]
+id = "peregryn-aeries"
+name = "peregryn-aeries"
+topic = "Cliff-nests of the winged Peregryns, who answer to the Day Court when it suits them."
+
+[[category.channel]]
+id = "sunscorch-ruins"
+name = "sunscorch-ruins"
+topic = "Death-enabled zone. A city burned to glass in the War of Thorns: scavengers, curses and things that like the heat."
+
+[[category]]
+id = "dawn-court"
+name = "🌅 DAWN COURT"
+access = "rp"
+default_type = "forum"
+default_tags = ["Open", "Closed", "DE", "Mission", "Saga", "Challenge", "Finished"]
+
+[[category.channel]]
+id = "cliffside-palace"
+name = "cliffside-palace"
+topic = "The Dawn Court's palace on the eastern cliffs, where morning arrives first and courtiers rise to meet it."
+
+[[category.channel]]
+id = "halls-of-healing"
+name = "halls-of-healing"
+topic = "Prythian's finest healers. Neutral ground by old custom; drawing steel here is a crime in every court."
+
+[[category.channel]]
+id = "eastern-cliffs"
+name = "eastern-cliffs"
+topic = "Sheer cliffs above a cold sea: smugglers' stairs, sea caves and the storms that break on them."
+
+[[category]]
+id = "spring-court"
+name = "🌸 SPRING COURT"
+access = "rp"
+default_type = "forum"
+default_tags = ["Open", "Closed", "DE", "Mission", "Saga", "Challenge", "Finished"]
+
+[[category.channel]]
+id = "spring-manor"
+name = "spring-manor"
+topic = "The Spring Court's seat: rose gardens, endless blossom and a court that mistakes beauty for safety."
+
+[[category.channel]]
+id = "spring-villages"
+name = "spring-villages"
+topic = "Farms and festival towns under an eternal spring. Calanmai fires burn on the hills each year."
+
+[[category.channel]]
+id = "rosehall"
+name = "rosehall"
+topic = "The ancestral estate of Spring's old rulers, abandoned since the war. Overgrown, haunted and full of locked doors."
+
+[[category.channel]]
+id = "spring-woods"
+name = "spring-woods"
+topic = "Deep woods near the Wall. Naga, wild beasts and things the High Lords used to hunt."
+
+[[category]]
+id = "summer-court"
+name = "🌊 SUMMER COURT"
+access = "rp"
+default_type = "forum"
+default_tags = ["Open", "Closed", "DE", "Mission", "Saga", "Challenge", "Finished"]
+
+[[category.channel]]
+id = "adriata"
+name = "adriata"
+topic = "The Summer Court's island city of white walls and turquoise water, rebuilt twice in living memory."
+
+[[category.channel]]
+id = "island-palace"
+name = "island-palace"
+topic = "The palace in Adriata's bay: tide-gates, sea-glass halls and a treasury everyone wants a look at."
+
+[[category.channel]]
+id = "summer-harbors"
+name = "summer-harbors"
+topic = "Docks, shipyards and markets where every court's coin changes hands."
+
+[[category.channel]]
+id = "sapphire-reefs"
+name = "sapphire-reefs"
+topic = "Reefs and wrecks off the Summer coast. Pearls, pirates and creatures with teeth."
+
+[[category]]
+id = "autumn-court"
+name = "🍂 AUTUMN COURT"
+access = "rp"
+default_type = "forum"
+default_tags = ["Open", "Closed", "DE", "Mission", "Saga", "Challenge", "Finished"]
+
+[[category.channel]]
+id = "forest-house"
+name = "forest-house"
+topic = "The Autumn Court's seat, a palace grown through an ancient forest. Every sibling here is a rival."
+
+[[category.channel]]
+id = "harvest-villages"
+name = "harvest-villages"
+topic = "Orchards, vineyards and harvest fairs under a sky that is always gold and red."
+
+[[category.channel]]
+id = "ember-woods"
+name = "ember-woods"
+topic = "Forests that never finish burning. Fire-touched beasts and outlaw camps."
+
+[[category.channel]]
+id = "hunting-grounds"
+name = "hunting-grounds"
+topic = "Death-enabled zone. The Autumn Court's hunting preserve. The Great Hunt does not ask whether you are the hunter."
+
+[[category]]
+id = "winter-court"
+name = "❄️ WINTER COURT"
+access = "rp"
+default_type = "forum"
+default_tags = ["Open", "Closed", "DE", "Mission", "Saga", "Challenge", "Finished"]
+
+[[category.channel]]
+id = "winter-palace"
+name = "winter-palace"
+topic = "The Winter Court's palace of ice and starlight, warmed only by its hearths and its grudges."
+
+[[category.channel]]
+id = "winter-villages"
+name = "winter-villages"
+topic = "Snowbound towns, sled roads and trading posts that endure the long dark together."
+
+[[category.channel]]
+id = "snowbound-forest"
+name = "snowbound-forest"
+topic = "Pine forests buried in snow, home to ice-wolves and things that hunt in white-outs."
+
+[[category.channel]]
+id = "white-wastes"
+name = "white-wastes"
+topic = "Death-enabled zone. The frozen north beyond the last village, where cold kills faster than steel."
+
+[[category]]
+id = "the-middle"
+name = "🗻 THE MIDDLE"
+access = "rp"
+default_type = "forum"
+default_tags = ["Open", "Closed", "DE", "Mission", "Saga", "Challenge", "Finished"]
+
+[[category.channel]]
+id = "crossroads"
+name = "crossroads"
+topic = "A neutral market town where the court roads meet. Every court's spies drink at the same inn."
+
+[[category.channel]]
+id = "under-the-mountain"
+name = "under-the-mountain"
+topic = "Death-enabled zone. The sealed court beneath Prythian's central mountain, empty since the war. It is not empty."
+
+[[category.channel]]
+id = "middle-woods"
+name = "middle-woods"
+topic = "Death-enabled zone. The tangled heart of Prythian. Something weaves in a cottage there, and it is always hungry."
+
+[[category.channel]]
+id = "middengard"
+name = "middengard"
+topic = "Death-enabled zone. Bogs and mud-flats where the great wyrms burrow. Watch the ground."
+
+[[category]]
+id = "mortal-lands"
+name = "🧱 MORTAL LANDS"
+access = "rp"
+default_type = "forum"
+default_tags = ["Open", "Closed", "DE", "Mission", "Saga", "Challenge", "Finished"]
+
+[[category.channel]]
+id = "the-wall"
+name = "the-wall"
+topic = "The invisible Wall between Prythian and the mortal lands. Its holes are secrets worth killing for."
+
+[[category.channel]]
+id = "mortal-villages"
+name = "mortal-villages"
+topic = "Human villages south of the Wall. Iron on the doors, ash in the quivers, and old stories about the fae."
+
+[[category.channel]]
+id = "mortal-ports"
+name = "mortal-ports"
+topic = "Human harbor towns trading with the continent. Merchants, smugglers and envoys of the mortal queens."
+
+[[category.channel]]
+id = "mortal-woods"
+name = "mortal-woods"
+topic = "Hunting woods near the Wall, where humans go hungry enough to cross."
+
+[[category]]
+id = "beyond-the-sea"
+name = "🌍 BEYOND THE SEA"
+access = "rp"
+default_type = "forum"
+default_tags = ["Open", "Closed", "DE", "Mission", "Saga", "Challenge", "Finished"]
+
+[[category.channel]]
+id = "hybern"
+name = "hybern"
+topic = "Death-enabled zone. The island kingdom to the west, never at peace with Prythian. Prythians are spies until proven dead."
+
+[[category.channel]]
+id = "the-continent"
+name = "the-continent"
+topic = "Vallahan, Montesere, Rask and the mortal queens' realms. Foreign courts, foreign rules."
+
+[[category.channel]]
+id = "open-sea"
+name = "open-sea"
+topic = "Ships between Prythian, Hybern and the continent. Storms, pirates and the deep things below."
+
+[[category.channel]]
+id = "the-prison"
+name = "the-prison"
+adopt = 1556670875846058044
+topic = "Death-enabled zone. An island mountain of cells older than the courts. What is locked here wants out."
+
+# ---------------------------------------------------------------- court halls (private OOC per allegiance)
+
+[[category]]
+id = "court-halls"
+name = "🏰 COURT HALLS"
+access = "court-hall"
+
+[[category.channel]]
+id = "night-hall"
+name = "🌙night-court-hall"
+grant = ["Night Court"]
+topic = "Night Court members: plots, missions and court business."
+
+[[category.channel]]
+id = "day-hall"
+name = "☀️day-court-hall"
+grant = ["Day Court"]
+topic = "Day Court members: plots, missions and court business."
+
+[[category.channel]]
+id = "dawn-hall"
+name = "🌅dawn-court-hall"
+grant = ["Dawn Court"]
+topic = "Dawn Court members: plots, missions and court business."
+
+[[category.channel]]
+id = "spring-hall"
+name = "🌸spring-court-hall"
+grant = ["Spring Court"]
+topic = "Spring Court members: plots, missions and court business."
+
+[[category.channel]]
+id = "summer-hall"
+name = "🌊summer-court-hall"
+grant = ["Summer Court"]
+topic = "Summer Court members: plots, missions and court business."
+
+[[category.channel]]
+id = "autumn-hall"
+name = "🍂autumn-court-hall"
+grant = ["Autumn Court"]
+topic = "Autumn Court members: plots, missions and court business."
+
+[[category.channel]]
+id = "winter-hall"
+name = "❄️winter-court-hall"
+grant = ["Winter Court"]
+topic = "Winter Court members: plots, missions and court business."
+
+[[category.channel]]
+id = "courtless-camp"
+name = "🔥courtless-camp"
+grant = ["Courtless"]
+topic = "The courtless: wanderers, mercenaries and the unsworn."
+
+[[category.channel]]
+id = "outlaw-den"
+name = "🗝️outlaw-den"
+grant = ["Outlaw"]
+topic = "Outlaws: bounties, hideouts and who is hunting whom."
+
+# ---------------------------------------------------------------- scenes
+
+[[category]]
+id = "scenes"
+name = "🫧 SCENES"
+access = "rp"
+
+[[category.channel]]
+id = "rp-bubbles"
+name = "🫧rp-bubbles"
+type = "forum"
+topic = "Scenes that fit no location forum. Title them 'Place | Scene'. Inactive posts are marked Finished after 14 days."
+tags = ["Open", "Closed", "Finished", "DE", "Guide"]
+
+[[category.channel.thread]]
+title = "🫧 How Bubbles Work"
+doc = "templates/bubble.md"
+tags = ["Guide"]
+pin = true
+
+[[category.channel]]
+id = "estates"
+name = "🏠estates"
+type = "forum"
+topic = "Player homes, businesses, war-halls, academies and keeps. One post per property."
+tags = ["Cottage", "Manor", "Estate", "Business", "War-hall", "Academy", "Keep", "Guide"]
+
+[[category.channel.thread]]
+title = "🏠 Estate Registration"
+doc = "templates/estate.md"
+tags = ["Guide"]
+pin = true
+
+[[category.channel]]
+id = "event-grounds"
+name = "🎭event-grounds"
+topic = "Site events too big for one location."
+
+[[category.channel]]
+id = "travel-log"
+name = "🧳travel-log"
+access = "players"
+topic = "Log travel between regions: who, from, to, how. Arrival times are in 06-combat and 10-market."
+docs = ["docs/travel-log.md"]
+
+# ---------------------------------------------------------------- help
+
+[[category]]
+id = "help"
+name = "❓ HELP"
+access = "ooc"
+
+[[category.channel]]
+id = "ask-staff"
+name = "❓ask-staff"
+topic = "Questions for staff. Never DM staff about server business."
+
+[[category.channel]]
+id = "member-help-desk"
+name = "🤝member-help-desk"
+topic = "Questions for other members."
+
+[[category.channel]]
+id = "suggestions"
+name = "💡suggestions"
+topic = "Ideas for the server. Staff may turn good ones into polls."
+
+[[category.channel]]
+id = "safety"
+name = "🛟safety"
+topic = "Content, consent and comfort concerns. Raise them here or in a ticket."
+
+[[category.channel]]
+id = "submit-a-ticket"
+name = "🎫submit-a-ticket"
+topic = "Private tickets: character review, claims, disputes, reports."
+docs = ["docs/tickets.md"]
+
+# ---------------------------------------------------------------- staff
+
+[[category]]
+id = "staff"
+name = "🛡️ STAFF"
+access = "staff"
+
+[[category.channel]]
+id = "staff-vc"
+name = "🔊 Staff VC"
+type = "voice"
+
+[[category.channel]]
+id = "staff-chat"
+name = "💬staff-chat"
+topic = "Staff discussion."
+
+[[category.channel]]
+id = "moderator-only"
+name = "📡moderator-only"
+adopt = 1556486500185538672
+topic = "Discord community updates."
+
+[[category.channel]]
+id = "staff-resources"
+name = "📑staff-resources"
+topic = "How staff grade, approve and assign roles."
+docs = ["docs/staff-resources.md"]
+
+[[category.channel]]
+id = "application-review"
+name = "📋application-review"
+topic = "Character and claim reviews: link the post, vote, record the verdict."
+
+[[category.channel]]
+id = "lore-and-npcs"
+name = "📜lore-and-npcs"
+type = "forum"
+topic = "Staff NPCs, regents, locations and secret lore."
+tags = ["NPC", "Lore", "Location", "Template"]
+
+[[category.channel.thread]]
+title = "📜 NPC & Lore Template"
+doc = "templates/lore.md"
+tags = ["Template"]
+pin = true
+
+[[category.channel]]
+id = "story-workshop"
+name = "🧭story-workshop"
+grant = ["Storyteller"]
+topic = "Storytellers and staff: mission reviews and saga approvals."
+
+[[category.channel]]
+id = "mod-log"
+name = "🗂️mod-log"
+topic = "Every moderation action, one line each."
+
+# ---------------------------------------------------------------- archive
+
+[[category]]
+id = "archive"
+name = "📦 ARCHIVE"
+access = "archive"
+
+[[category.channel]]
+id = "archive-bubbles"
+name = "_archive_rp-bubbles"
+type = "forum"
+access = "archive-hidden"
+adopt = 1556490074462625832
+topic = "Threads auto-close every week of inactivity. Marked \"FINISHED\" after 14days of no activity."
+tags = [
+    { name = "OPEN", emoji = "🟢" },
+    { name = "INVITE", emoji = "🟠" },
+    { name = "FINISHED", emoji = "🔴" },
+    { name = "INFO", emoji = "📜", moderated = true },
+]

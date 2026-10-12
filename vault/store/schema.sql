@@ -349,3 +349,16 @@ CREATE TABLE IF NOT EXISTS import_map (
     extra        TEXT,                       -- e.g. webhook token
     PRIMARY KEY (target_guild, kind, source_id)
 );
+
+-- ---------------------------------------------------------------- build
+
+-- Blueprint key -> Discord id; makes builds idempotent.
+-- e.g. 'role:Staff', 'channel:velaris', 'message:rules:0', 'retired:<id>' (a channel replaced
+-- because its type changed); digest = hash of posted text.
+CREATE TABLE IF NOT EXISTS build_map (
+    guild_id  INTEGER NOT NULL,
+    key       TEXT NOT NULL,
+    target_id INTEGER NOT NULL,
+    digest    TEXT,
+    PRIMARY KEY (guild_id, key)
+);

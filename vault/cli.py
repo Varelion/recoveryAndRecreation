@@ -3,8 +3,10 @@
     python -m vault export  <guild>            full, then incremental
     python -m vault watch   <guild>            catch up, then record live
     python -m vault import  <source> <target>  recreate into another guild
+    python -m vault build   <guild> <dir>      converge a guild onto a blueprint
     python -m vault dump    --out dir          CSV/JSONL of all tables + views
     python -m vault stats                      row counts
+    python -m vault erp     <user>             ERP language score of a user
 """
 
 import argparse
@@ -15,7 +17,9 @@ from pathlib import Path
 
 from vault import config
 from vault.api import Link
-from vault.config import Media, Messages, Mode, ReactionUsers
+from vault.config import Media, Messages, Mode, Prune, ReactionUsers
+from vault.services import blueprint, erp
+from vault.services.builder import Blocked, BuildOptions
 from vault.services.dump import Format, dump
 from vault.services.exporter import ExportOptions
 from vault.services.importer import ImportOptions
@@ -45,6 +49,15 @@ def _parser() -> argparse.ArgumentParser:
     imp.add_argument("--channel", type=int, action="append", default=[], help="Limit to channel/category (repeat)")
     imp.add_argument("--skip-messages", action="store_true", help="Structure only")
     imp.add_argument("--dry-run", action="store_true", help="Count what would be created")
+    imp.add_argument("--into", type=int, help="Existing target channel; each --channel becomes a thread of it")
+
+    build = sub.add_parser("build", help="Converge a guild onto a blueprint: roles, channels, docs")
+    build.add_argument("guild", type=int)
+    build.add_argument("blueprint", type=Path, help="Directory holding server.toml and its docs")
+    build.add_argument("--dry-run", action="store_true", help="Report what would change")
+    build.add_argument("--prune-roles", action="store_true", help="Delete roles absent from the blueprint")
+    build.add_argument("--prune-channels", action="store_true",
+                       help="Delete channels the build made that the blueprint dropped or replaced")
 
     out = sub.add_parser("dump", help="Write every table and view as CSV or JSONL")
     out.add_argument("--out", type=Path, required=True)
@@ -52,13 +65,16 @@ def _parser() -> argparse.ArgumentParser:
 
     stats = sub.add_parser("stats", help="Row counts")
     stats.add_argument("--guild", type=int)
+
+    score = sub.add_parser("erp", help="Score a user's ERP language")
+    score.add_argument("user", help="User id, username, global name or nickname")
     return root
 
 
 def _export_flags(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--media", action="store_true", help="Download attachments (deduplicated)")
+    parser.add_argument("--no-media", action="store_true", help="Skip attachment downloads")
     parser.add_argument("--media-dir", type=Path, default=Path(config.MEDIA_DIR))
-    parser.add_argument("--reaction-users", action="store_true", help="Record who reacted (slow: 1 call/emoji)")
+    parser.add_argument("--no-reaction-users", action="store_true", help="Skip who reacted (slow: 1 call/emoji)")
     parser.add_argument("--rescan-days", type=int, default=0,
                         help="Re-read recent N days to catch edits, reactions, deletions")
     parser.add_argument("--channel", type=int, action="append", default=[], help="Limit to channel/category (repeat)")
@@ -67,8 +83,8 @@ def _export_flags(parser: argparse.ArgumentParser) -> None:
 
 def _export_options(args: argparse.Namespace) -> ExportOptions:
     return ExportOptions(
-        media=Media.DOWNLOAD if args.media else Media.SKIP,
-        reaction_users=ReactionUsers.FETCH if args.reaction_users else ReactionUsers.SKIP,
+        media=Media.SKIP if args.no_media else Media.DOWNLOAD,
+        reaction_users=ReactionUsers.SKIP if args.no_reaction_users else ReactionUsers.FETCH,
         rescan_days=args.rescan_days,
         channels=set(args.channel),
         workers=args.workers,
@@ -94,6 +110,14 @@ async def _dispatch(args: argparse.Namespace, store: Store) -> None:
         print(json.dumps(await store.counts(args.guild), indent=2))
         return
 
+    if args.command == "erp":
+        report = await erp.score(store, args.user)
+        print(json.dumps(report.summary(), indent=2) if report else f"Unknown user: {args.user}")
+        return
+
+    # Checked before connecting, so a broken blueprint never reaches Discord.
+    layout = _layout(args.blueprint) if args.command == "build" else None
+
     async with Link(config.token()) as link:
         vault = Vault(link, store)
         if args.command == "export":
@@ -101,18 +125,43 @@ async def _dispatch(args: argparse.Namespace, store: Store) -> None:
             return
 
         if args.command == "import":
+            if args.into and not args.channel:
+                raise SystemExit("--into needs at least one --channel")
+
             options = ImportOptions(
                 messages=Messages.SKIP if args.skip_messages else Messages.INCLUDE,
                 mode=Mode.DRY_RUN if args.dry_run else Mode.LIVE,
                 channels=set(args.channel),
+                into=args.into,
             )
             print(json.dumps(await follow(vault.import_guild(args.source, args.target, options)), indent=2))
+            return
+
+        if args.command == "build":
+            options = BuildOptions(
+                mode=Mode.DRY_RUN if args.dry_run else Mode.LIVE,
+                roles=Prune.DELETE if args.prune_roles else Prune.KEEP,
+                channels=Prune.DELETE if args.prune_channels else Prune.KEEP,
+            )
+            try:
+                report = await follow(vault.build(args.guild, layout, options))
+            except Blocked as error:
+                raise SystemExit(str(error)) from error
+
+            print(json.dumps(report, indent=2, ensure_ascii=False))
             return
 
         if args.command == "watch":
             if not args.no_catch_up:
                 await follow(vault.export(args.guild, _export_options(args)))
             await _online(link, follow(await vault.watch(args.guild)))
+
+
+def _layout(path: Path) -> blueprint.Blueprint:
+    try:
+        return blueprint.load(path)
+    except blueprint.BlueprintError as error:
+        raise SystemExit(f"Blueprint {path} is invalid:\n{error}") from error
 
 
 async def _online(link: Link, work) -> None:

@@ -4,7 +4,9 @@ Starts actions as tracked jobs; UIs never build services themselves.
 """
 
 from vault.api import Json, Link
-from vault.services import exporter, importer
+from vault.services import builder, exporter, importer
+from vault.services.blueprint import Blueprint
+from vault.services.builder import BuildOptions, Builder
 from vault.services.exporter import ExportOptions, Exporter
 from vault.services.importer import ImportOptions, Importer
 from vault.services.jobs import Job, Jobs
@@ -12,7 +14,7 @@ from vault.services.progress import Progress
 from vault.services.watcher import Watcher
 from vault.store import Store
 
-EXPORT, IMPORT, WATCH = "export", "import", "watch"
+EXPORT, IMPORT, WATCH, BUILD = "export", "import", "watch", "build"
 
 
 class Vault:
@@ -30,6 +32,11 @@ class Vault:
         progress = Progress(IMPORT, importer.PHASES)
         work = Importer(self._link.rest, self._store, source, target, options, progress).run()
         return self.jobs.start(IMPORT, target, by, progress, work)
+
+    def build(self, guild_id: int, blueprint: Blueprint, options: BuildOptions, by: int | None = None) -> Job:
+        progress = Progress(BUILD, builder.PHASES)
+        work = Builder(self._link.rest, self._store, guild_id, blueprint, options, progress).run()
+        return self.jobs.start(BUILD, guild_id, by, progress, work)
 
     async def watch(self, guild_id: int, by: int | None = None) -> Job:
         """Record live events."""

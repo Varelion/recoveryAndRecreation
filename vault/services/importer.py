@@ -4,6 +4,9 @@
           ─► messages per channel via webhook (original name + avatar)
              threads / forum posts recreated as their first message arrives
 
+With `into`, only messages: each selected source channel or thread becomes
+a thread (post, if forum) of one existing target channel.
+
 Every created object is recorded in import_map, so re-running resumes and
 never duplicates. Messages keep order per channel; original time is shown
 as a subtext line because webhooks cannot backdate.
@@ -40,6 +43,9 @@ _FALLBACK = {
     ChannelType.MEDIA: ChannelType.TEXT,
 }
 
+# Channels whose threads open with a first message (posts).
+_POST_PARENTS = {ChannelType.FORUM, ChannelType.MEDIA}
+
 # Channel fields safe to copy on creation.
 _CHANNEL_FIELDS = ("name", "topic", "nsfw", "rate_limit_per_user", "bitrate", "user_limit", "position",
                    "default_auto_archive_duration", "default_thread_rate_limit_per_user",
@@ -51,6 +57,7 @@ class ImportOptions:
     messages: Messages = Messages.INCLUDE
     mode: Mode = Mode.LIVE
     channels: set[int] = field(default_factory=set)  # empty = all
+    into: int | None = None  # existing target channel receiving `channels` as threads
 
 
 class Importer:
@@ -67,12 +74,7 @@ class Importer:
     async def run(self) -> Json:
         run_id = await self._store.begin_run("import", self._target)
         try:
-            await self._roles()
-            channels = await self._store.guild_rows("channels", self._source, "type = 4 DESC, position")
-            await self._channels(channels)
-            await self._emojis()
-            if self._opts.messages is Messages.INCLUDE:
-                await self._all_messages(channels)
+            await (self._into(self._opts.into) if self._opts.into else self._guild())
         except BaseException as exc:
             status = "cancelled" if isinstance(exc, asyncio.CancelledError) else "failed"
             await self._store.end_run(run_id, status, dict(self._stats))
@@ -80,6 +82,14 @@ class Importer:
 
         await self._store.end_run(run_id, "ok", dict(self._stats))
         return dict(self._stats)
+
+    async def _guild(self) -> None:
+        await self._roles()
+        channels = await self._store.guild_rows("channels", self._source, "type = 4 DESC, position")
+        await self._channels(channels)
+        await self._emojis()
+        if self._opts.messages is Messages.INCLUDE:
+            await self._all_messages(channels)
 
     # ------------------------------------------------------------ helpers
 
@@ -114,9 +124,18 @@ class Importer:
             if self._dry:
                 continue
 
-            created = await self._rest.create_role(self._target, {
-                k: role.get(k) for k in ("name", "permissions", "color", "hoist", "mentionable", "unicode_emoji")
-            })
+            payload = {k: role.get(k) for k in ("name", "permissions", "color", "hoist", "mentionable", "unicode_emoji")}
+            try:
+                created = await self._rest.create_role(self._target, payload)
+            except Denied:
+                if not payload["unicode_emoji"]:
+                    raise
+
+                # Role icons need boost level 2; keep the role, drop the icon.
+                log.warning("Role %s created without icon", role["name"])
+                payload["unicode_emoji"] = None
+                created = await self._rest.create_role(self._target, payload)
+
             await self._store.map(self._target, ROLE, int(role["id"]), int(created["id"]))
 
     async def _everyone(self, role: Json) -> None:
@@ -204,7 +223,8 @@ class Importer:
                 data = await self._rest.cdn(f"{config.CDN}/emojis/{emoji['id']}.{ext}")
                 uri = f"data:image/{ext};base64,{base64.b64encode(data).decode()}"
                 created = await self._rest.create_emoji(self._target, emoji["name"], uri)
-            except (Denied, Missing) as exc:
+            except (Denied, Missing, Rejected) as exc:
+                # Rejected: target emoji cap reached (50 unboosted).
                 log.warning("Emoji %s skipped: %s", emoji["name"], exc)
                 continue
 
@@ -245,6 +265,28 @@ class Importer:
             forum = target["extra"] == str(int(ChannelType.FORUM))
             for thread in threads.get(channel["id"], []):
                 await self._thread(thread, target["target_id"], forum)
+
+    async def _into(self, parent: int) -> None:
+        """Replay selected sources as threads of `parent`, oldest source first."""
+        rows = await self._store.guild_rows("channels", self._source, "channel_id")
+        sources = [r for r in rows if int(r["id"]) in self._opts.channels]
+        forum = (await self._rest.channel(parent))["type"] in _POST_PARENTS
+
+        # Already-imported messages count as done, so a resumed job starts at its real percentage.
+        total = done = 0
+        for source in sources:
+            live, imported = await self._store.own_counts(self._target, int(source["id"]))
+            total += live
+            done += imported
+
+        self._progress.phase("messages", total)
+        self._progress.advance(done)
+        if self._dry:
+            self._stats["messages"] += total - done
+            return
+
+        for source in sources:
+            await self._thread(source, parent, forum)
 
     async def _thread(self, thread: Json, parent: int, forum: bool) -> None:
         """Forum posts are born from their first webhook message; other threads are opened first."""
