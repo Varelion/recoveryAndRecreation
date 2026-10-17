@@ -37,6 +37,7 @@ TOPIC_LIMIT = 1024
 TAG_LIMIT = 20
 TAG_NAME_LIMIT = 20
 CATEGORY_CHILDREN = 50
+PINNED_POSTS = 1  # per forum
 GUILD_CHANNELS = 500
 COLOR_MAX = 0xFFFFFF
 SLOWMODE_MAX = 21600
@@ -431,6 +432,10 @@ def _check_forum(channel: Channel, where: str, ids: set[str], problems: list[str
 
     if channel.require_tag and not channel.tags:
         problems.append(f"{where}: require_tag needs tags")
+
+    pinned = sum(1 for thread in channel.threads if thread.pin)
+    if pinned > PINNED_POSTS:
+        problems.append(f"{where}: {pinned} pinned posts, Discord allows {PINNED_POSTS} per forum")
 
     for thread in channel.threads:
         _check_name(thread.title, f"{where} thread", problems)

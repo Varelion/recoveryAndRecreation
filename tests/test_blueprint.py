@@ -44,6 +44,14 @@ def test_reports_every_problem_at_once(tmp_path):
         assert expected in report
 
 
+def test_one_pinned_post_per_forum(tmp_path):
+    second = '\n[[category.channel.thread]]\ntitle = "Face Claims"\ndoc = "docs/claims.md"\npin = true\n'
+    twice = MANIFEST.replace('tags = ["Open"]\npin = true\n', 'tags = ["Open"]\npin = true\n' + second, 1)
+
+    with pytest.raises(BlueprintError, match="2 pinned posts, Discord allows 1"):
+        blueprint(tmp_path, twice)
+
+
 def test_grant_needs_a_grant_preset(tmp_path):
     broken = MANIFEST.replace('grant = ["Night Court"]', 'grant = ["Night Court"]\naccess = "public"')
 

@@ -39,6 +39,7 @@ python -m vault export <guild> [--no-media] [--no-reaction-users] [--rescan-days
 python -m vault watch  <guild> [--no-catch-up] [export flags]
 python -m vault import <source> <target> [--dry-run] [--skip-messages] [--channel ID]... [--into ID]
 python -m vault build  <guild> <blueprint-dir> [--dry-run] [--prune-roles] [--prune-channels]
+python -m vault community <guild> [--dry-run]
 python -m vault dump --out dir [--format csv|jsonl]
 python -m vault stats [--guild ID]
 ```
@@ -90,6 +91,13 @@ the tables for pandas, DuckDB or spreadsheets.
 - Forum/announcement/stage channels need a Community guild; they fall back to
   text/voice otherwise.
 - Resumable: every created object is recorded in `import_map`; re-running continues.
+
+## Community
+
+`community` makes a guild a Community, which forum and announcement channels need:
+it creates `rules` and `moderator-only` text channels when missing, then sets the
+feature with Discord's prerequisites (verification Low, media filter for everyone,
+mentions-only notifications). Adopt the two channels in the blueprint afterwards.
 
 ## Build
 

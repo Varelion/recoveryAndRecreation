@@ -4,6 +4,7 @@
     python -m vault watch   <guild>            catch up, then record live
     python -m vault import  <source> <target>  recreate into another guild
     python -m vault build   <guild> <dir>      converge a guild onto a blueprint
+    python -m vault community <guild>        enable Community (forum channels) on a guild
     python -m vault dump    --out dir          CSV/JSONL of all tables + views
     python -m vault stats                      row counts
     python -m vault erp     <user>             ERP language score of a user
@@ -18,7 +19,7 @@ from pathlib import Path
 from vault import config
 from vault.api import Link
 from vault.config import Media, Messages, Mode, Prune, ReactionUsers
-from vault.services import blueprint, erp
+from vault.services import blueprint, community, erp
 from vault.services.builder import Blocked, BuildOptions
 from vault.services.dump import Format, dump
 from vault.services.exporter import ExportOptions
@@ -58,6 +59,10 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--prune-roles", action="store_true", help="Delete roles absent from the blueprint")
     build.add_argument("--prune-channels", action="store_true",
                        help="Delete channels the build made that the blueprint dropped or replaced")
+
+    enable = sub.add_parser("community", help="Enable Community on a guild: rules + updates channels, features")
+    enable.add_argument("guild", type=int)
+    enable.add_argument("--dry-run", action="store_true", help="Report what would change")
 
     out = sub.add_parser("dump", help="Write every table and view as CSV or JSONL")
     out.add_argument("--out", type=Path, required=True)
@@ -135,6 +140,12 @@ async def _dispatch(args: argparse.Namespace, store: Store) -> None:
                 into=args.into,
             )
             print(json.dumps(await follow(vault.import_guild(args.source, args.target, options)), indent=2))
+            return
+
+        if args.command == "community":
+            mode = Mode.DRY_RUN if args.dry_run else Mode.LIVE
+            report = await community.enable(link.rest, args.guild, mode)
+            print(json.dumps(report.summary(), indent=2))
             return
 
         if args.command == "build":
