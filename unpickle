@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Restore data uploaded by ./pickle: stream parts in order, join, unpack.
+# gzip's CRC check fails the restore if any part is corrupt.
+set -euo pipefail
+
+readonly TAG="data"
+
+cd "$(dirname "$0")"
+
+parts=$(gh release view "$TAG" --json assets --jq '.assets[].name' | sort)
+
+for part in $parts; do
+  gh release download "$TAG" --pattern "$part" --output -
+done | gzip -d | tar -xf -
+
+echo "Unpickled release '$TAG'"

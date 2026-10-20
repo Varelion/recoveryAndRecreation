@@ -221,3 +221,8 @@ vault.db
 *.db-wal
 *.db-shm
 media/
+
+# Restored by ./unpickle
+/media
+/vault.db
+data.tgz.*

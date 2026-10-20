@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Pack the data listed in .pickle into GitHub release assets.
+# Git rejects files >100MB; release assets allow 2GB each, unlimited count.
+#
+#   .pickle paths --tar--> gzip --split--> data.tgz.aa, .ab, ... --> release "data"
+#
+# Parts stream through disk one at a time: written, uploaded, deleted.
+set -euo pipefail
+
+readonly TAG="data"
+readonly LIST=".pickle"
+readonly PART_SIZE="${PICKLE_PART_SIZE:-1900M}"
+readonly PREFIX="data.tgz."
+readonly RETRIES=5
+
+cd "$(dirname "$0")"
+readonly SELF="$(pwd)/$(basename "$0")"
+
+# Called by split for each finished part: upload, retrying on network errors.
+if [ "${1:-}" = "--upload" ]; then
+  cat > "$2"
+
+  for ((i = 1; i <= RETRIES; i++)); do
+    if gh release upload "$TAG" "$2" --clobber; then
+      rm "$2"
+      exit 0
+    fi
+
+    echo "Upload of $2 failed ($i/$RETRIES), retrying" >&2
+    sleep 30
+  done
+
+  exit 1
+fi
+
+# Replace the previous snapshot.
+gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+gh release create "$TAG" --title "Pickled data" --notes "Run ./unpickle to restore."
+
+tar -cf - -T "$LIST" \
+  | gzip -1 \
+  | split -b "$PART_SIZE" --filter='"'"$SELF"'" --upload "$FILE"' - "$PREFIX"
+
+echo "Pickled $(tr '\n' ' ' < "$LIST")into release '$TAG'"
