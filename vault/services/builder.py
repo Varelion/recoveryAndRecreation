@@ -343,6 +343,15 @@ class Builder:
         wanted = {c.id for c in self._bp.categories} | {ch.id for ch in self._bp.channels()}
         built = await self._store.built_under(self._guild, CHANNEL)
         dropped = [r for r in built if r["key"][len(CHANNEL):] not in wanted]
+
+        # A channel adopted under a new id still sits under its old key too: forget that key, keep the channel.
+        #   channel:dice → 1567…  and  channel:spam → 1567…  ⇒  channel:dice is dropped, never the channel
+        claimed = {int(r["target_id"]) for r in built if r["key"][len(CHANNEL):] in wanted}
+        stale = [r for r in dropped if int(r["target_id"]) in claimed]
+        dropped = [r for r in dropped if int(r["target_id"]) not in claimed]
+        if not self._dry:
+            for row in stale:
+                await self._store.unbuild(self._guild, row["key"])
         retired = await self._store.built_under(self._guild, RETIRED)
         doomed = {int(r["target_id"]): r["key"] for r in dropped + retired}
         doomed |= {i: f"{RETIRED}{i}" for i in self._retired if i not in doomed}

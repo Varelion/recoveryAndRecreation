@@ -236,6 +236,22 @@ async def test_dropped_channel_is_deleted_only_on_request(store, tmp_path):
     assert "extra_channels" not in await build(guild, store, layout)
 
 
+async def test_channel_adopted_under_a_new_id_is_no_extra(store, tmp_path):
+    guild = FakeGuild()
+    await build(guild, store, blueprint(tmp_path / "bp"))
+    lounge = guild.channel("Lounge")["id"]
+
+    # The same channel, renamed under a new blueprint id: its old key must not count it as dropped.
+    renamed = LOUNGE.replace('id = "lounge"\nname = "Lounge"', f'id = "den"\nname = "Den"\nadopt = {lounge}')
+    layout = blueprint(tmp_path / "bp", MANIFEST.replace(LOUNGE, renamed))
+    stats = await build(guild, store, layout, channels=Prune.DELETE)
+
+    assert "extra_channels" not in stats
+    assert not [c for c in guild.calls if c[0] == "delete_channel"]
+    assert any(c["id"] == lounge and c["name"] == "Den" for c in guild.channels_data)
+    assert await store.built(GUILD, "channel:lounge") is None
+
+
 async def test_channels_the_build_never_made_are_never_pruned(store, tmp_path):
     guild = FakeGuild()
     guild.channels_data.append({"id": "777", "type": 0, "name": "ticket-0001", "parent_id": None, "position": 9,
