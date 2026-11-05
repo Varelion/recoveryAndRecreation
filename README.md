@@ -38,6 +38,8 @@ Bot, in the Developer Portal:
 python -m vault export <guild> [--no-media] [--no-reaction-users] [--rescan-days N] [--channel ID]...
 python -m vault watch  <guild> [--no-catch-up] [export flags]
 python -m vault import <source> <target> [--dry-run] [--skip-messages] [--channel ID]... [--into ID]
+python -m vault backup <guild> --out dir [export flags]
+python -m vault restore <backup.db> <guild> [--dry-run] [--structure-only] [--channel ID]...
 python -m vault build  <guild> <blueprint-dir> [--dry-run] [--prune-roles] [--prune-channels]
 python -m vault community <guild> [--dry-run]
 python -m vault dump --out dir [--format csv|jsonl]
@@ -91,6 +93,20 @@ the tables for pandas, DuckDB or spreadsheets.
 - Forum/announcement/stage channels need a Community guild; they fall back to
   text/voice otherwise.
 - Resumable: every created object is recorded in `import_map`; re-running continues.
+
+## Backup and restore
+
+`backup` runs an incremental export, then copies the database (SQLite backup API)
+to `<out>/<guild>/<YYYY-MM-DD-HHMM>.db`, read-only, and prints its path.
+
+`restore` recovers a guild from one of its backups, into the same guild. Roles and
+channels still present (same id, or same name + type + parent) are left untouched;
+missing roles, categories and channels are recreated with their overwrites, topic,
+parent and position, then the messages of recreated channels are replayed by webhook
+(as `import` does). Messages lost from channels that still exist are not reposted.
+With `--channel`, only the roles those channels' overwrites need are recreated.
+Members do not get recreated roles back. A restore cut short mid-replay does not
+resume: delete the half-filled channel and run it again.
 
 ## Community
 

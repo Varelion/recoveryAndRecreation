@@ -299,3 +299,118 @@ class FakeGuild:
     async def delete_message(self, cid, mid):
         self.messages.get(cid, {}).pop(mid, None)
         self.calls.append(("delete", cid, mid))
+
+
+CATEGORY = 101
+GENERAL = 102
+CHAT = 103
+VIEW = "1024"
+
+
+class FakeLive(FakeGuild):
+    """FakeGuild the exporter can read and webhooks can post into: a guild to back up and restore.
+
+        INFO (category)
+        ├── general  topic "hello", mod may view, messages 201 202
+        └── chat     message 203
+
+    Message texts live in `texts`: `messages` is the exporter's read here, not FakeGuild's dict.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.roles_data.append(role(ROLE, "mod", 1))
+        self.channels_data = [
+            {"id": str(CATEGORY), "type": 4, "name": "INFO", "position": 0, "parent_id": None,
+             "permission_overwrites": []},
+            {"id": str(GENERAL), "type": 0, "name": "general", "position": 1, "parent_id": str(CATEGORY),
+             "topic": "hello", "permission_overwrites": [{"id": str(ROLE), "type": 0, "allow": VIEW, "deny": "0"}]},
+            {"id": str(CHAT), "type": 0, "name": "chat", "position": 2, "parent_id": str(CATEGORY),
+             "permission_overwrites": []},
+        ]
+        del self.messages
+        self.texts: dict[int, dict[int, str]] = {GENERAL: {201: "a", 202: "b"}, CHAT: {203: "c"}}
+        self.members_data = [{"user": user(USER), "roles": [str(ROLE)], "joined_at": "2023-01-01T00:00:00+00:00"}]
+        self.hooks: dict[int, int] = {}  # webhook id -> channel id
+
+    def delete(self, cid: int) -> None:
+        """Simulate a channel lost outside the bot: no call logged."""
+        self.channels_data.remove(self.channel_by_id(cid))
+        self.texts.pop(cid, None)
+
+    def channel_by_id(self, cid: int) -> dict:
+        return next(c for c in self.channels_data if c["id"] == str(cid))
+
+    def drop_role(self, rid: int) -> None:
+        self.roles_data.remove(self._role(rid))
+
+    # exporter reads
+    async def emojis(self, gid):
+        return []
+
+    async def stickers(self, gid):
+        return []
+
+    async def events(self, gid):
+        return []
+
+    async def automod(self, gid):
+        raise Denied("no")
+
+    async def invites(self, gid):
+        return []
+
+    async def webhooks(self, gid):
+        return []
+
+    async def bans(self, gid):
+        return
+        yield
+
+    async def members(self, gid):
+        for m in self.members_data:
+            yield m
+
+    async def audit(self, gid, after):
+        return
+        yield
+
+    async def active_threads(self, gid):
+        return {"threads": []}
+
+    async def archived_threads(self, cid, scope):
+        return
+        yield
+
+    async def messages(self, cid, after):
+        page = [message(mid, cid, text) for mid, text in sorted(self.texts.get(cid, {}).items()) if mid > after]
+        if page:
+            yield page
+
+    async def reaction_users(self, *args):
+        return
+        yield
+
+    async def cdn(self, url):
+        return b"img"
+
+    # webhook writes
+    async def create_webhook(self, cid, name):
+        wid = self._id()
+        self.hooks[wid] = cid
+        self.calls.append(("create_webhook", cid))
+        return {"id": str(wid), "token": "t"}
+
+    async def execute_webhook(self, wid, token, payload, files, thread_id):
+        cid = thread_id or self.hooks[wid]
+        mid = self._id()
+        self.texts.setdefault(cid, {})[mid] = payload["content"]
+        self.calls.append(("send", cid))
+        return {"id": str(mid), "channel_id": str(cid)}
+
+    async def create_thread(self, cid, name):
+        self.calls.append(("create_thread", cid, name))
+        return {"id": str(self._id())}
+
+    async def pin(self, cid, mid):
+        self.calls.append(("pin", mid))

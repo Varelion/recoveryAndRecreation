@@ -4,7 +4,9 @@ Takes raw Discord JSON, writes normalized rows plus history. Services never
 write SQL; they call these methods.
 """
 
+import asyncio
 import json
+import sqlite3
 from collections.abc import AsyncIterator, Iterable
 from enum import Enum
 from pathlib import Path
@@ -17,6 +19,7 @@ from vault.store.entities import (
 )
 
 _HERE = Path(__file__).parent
+_JOURNAL = "DELETE"  # snapshot journal mode: plain file, no -wal/-shm
 
 
 class Change(Enum):
@@ -37,12 +40,32 @@ class Store:
         await db.executescript((_HERE / "views.sql").read_text(encoding="utf-8"))
         return cls(db)
 
+    @classmethod
+    async def clone(cls, source: Path, path: Path) -> "Store":
+        """Open a writable working copy at `path` of a database that may be read-only (a backup)."""
+        # Off the event loop: a large archive takes a while to copy.
+        await asyncio.to_thread(_copy, source, path)
+        return await cls.open(path)
+
     async def close(self) -> None:
         await self._db.commit()
         await self._db.close()
 
     async def commit(self) -> None:
         await self._db.commit()
+
+    async def snapshot(self, path: Path) -> None:
+        """Consistent copy of the whole database to `path`, via SQLite's backup API.
+
+        The copy uses a rollback journal: a WAL file opened read-only would need sidecar files.
+        """
+        await self._db.commit()
+        target = sqlite3.connect(path, check_same_thread=False)
+        try:
+            await self._db.backup(target)
+            target.execute(f"PRAGMA journal_mode = {_JOURNAL}")
+        finally:
+            target.close()
 
     # ------------------------------------------------------------ runs & cursors
 
@@ -419,6 +442,11 @@ class Store:
         )
         await self._db.commit()
 
+    async def forget(self, target_guild: int) -> None:
+        """Drop every import_map row of a target guild."""
+        await self._db.execute("DELETE FROM import_map WHERE target_guild = ?", (target_guild,))
+        await self._db.commit()
+
     async def last_mapped(self, target_guild: int, channel_id: int) -> int:
         """Newest source message already imported for a channel (resume point)."""
         row = await self._one(
@@ -526,6 +554,16 @@ class Store:
     async def _all(self, sql: str, args: tuple = ()) -> list[aiosqlite.Row]:
         async with self._db.execute(sql, args) as cur:
             return await cur.fetchall()
+
+
+def _copy(source: Path, path: Path) -> None:
+    origin = sqlite3.connect(f"{source.resolve().as_uri()}?mode=ro", uri=True)
+    target = sqlite3.connect(path)
+    try:
+        origin.backup(target)
+    finally:
+        target.close()
+        origin.close()
 
 
 def _snowflake(value: Any) -> int | None:

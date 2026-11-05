@@ -120,23 +120,27 @@ class Importer:
             if role.get("managed") or await self._target_id(ROLE, role["id"]):
                 continue
 
-            self._stats["roles"] += 1
-            if self._dry:
-                continue
+            await self._role(role)
 
-            payload = {k: role.get(k) for k in ("name", "permissions", "color", "hoist", "mentionable", "unicode_emoji")}
-            try:
-                created = await self._rest.create_role(self._target, payload)
-            except Denied:
-                if not payload["unicode_emoji"]:
-                    raise
+    async def _role(self, role: Json) -> None:
+        """Create one stored role in the target and map it."""
+        self._stats["roles"] += 1
+        if self._dry:
+            return
 
-                # Role icons need boost level 2; keep the role, drop the icon.
-                log.warning("Role %s created without icon", role["name"])
-                payload["unicode_emoji"] = None
-                created = await self._rest.create_role(self._target, payload)
+        payload = {k: role.get(k) for k in ("name", "permissions", "color", "hoist", "mentionable", "unicode_emoji")}
+        try:
+            created = await self._rest.create_role(self._target, payload)
+        except Denied:
+            if not payload["unicode_emoji"]:
+                raise
 
-            await self._store.map(self._target, ROLE, int(role["id"]), int(created["id"]))
+            # Role icons need boost level 2; keep the role, drop the icon.
+            log.warning("Role %s created without icon", role["name"])
+            payload["unicode_emoji"] = None
+            created = await self._rest.create_role(self._target, payload)
+
+        await self._store.map(self._target, ROLE, int(role["id"]), int(created["id"]))
 
     async def _everyone(self, role: Json) -> None:
         await self._store.map(self._target, ROLE, int(role["id"]), self._target)

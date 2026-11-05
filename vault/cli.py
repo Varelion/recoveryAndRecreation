@@ -3,6 +3,8 @@
     python -m vault export  <guild>            full, then incremental
     python -m vault watch   <guild>            catch up, then record live
     python -m vault import  <source> <target>  recreate into another guild
+    python -m vault backup  <guild> --out dir  export, then a dated read-only db copy
+    python -m vault restore <backup> <guild>   recreate what the guild lost since the backup
     python -m vault build   <guild> <dir>      converge a guild onto a blueprint
     python -m vault community <guild>        enable Community (forum channels) on a guild
     python -m vault dump    --out dir          CSV/JSONL of all tables + views
@@ -24,6 +26,7 @@ from vault.services.builder import Blocked, BuildOptions
 from vault.services.dump import Format, dump
 from vault.services.exporter import ExportOptions
 from vault.services.importer import ImportOptions
+from vault.services.restore import RestoreOptions, UnknownGuild
 from vault.services.vault import Vault
 from vault.store import Store
 from vault.ui.console import follow
@@ -51,6 +54,18 @@ def _parser() -> argparse.ArgumentParser:
     imp.add_argument("--skip-messages", action="store_true", help="Structure only")
     imp.add_argument("--dry-run", action="store_true", help="Count what would be created")
     imp.add_argument("--into", type=int, help="Existing target channel; each --channel becomes a thread of it")
+
+    backup = sub.add_parser("backup", help="Export a guild, then save a dated read-only copy of the database")
+    backup.add_argument("guild", type=int)
+    backup.add_argument("--out", type=Path, required=True, help="Backups go to <out>/<guild>/<YYYY-MM-DD-HHMM>.db")
+    _export_flags(backup)
+
+    rescue = sub.add_parser("restore", help="Recreate what a guild lost, from one of its backups")
+    rescue.add_argument("backup", type=Path, help="Backup file written by `backup`")
+    rescue.add_argument("guild", type=int, help="Guild to restore into (the one backed up)")
+    rescue.add_argument("--channel", type=int, action="append", default=[], help="Limit to channel/category (repeat)")
+    rescue.add_argument("--structure-only", action="store_true", help="Roles and channels, no messages")
+    rescue.add_argument("--dry-run", action="store_true", help="List what would be recreated")
 
     build = sub.add_parser("build", help="Converge a guild onto a blueprint: roles, channels, docs")
     build.add_argument("guild", type=int)
@@ -122,6 +137,8 @@ async def _dispatch(args: argparse.Namespace, store: Store) -> None:
 
     # Checked before connecting, so a broken blueprint never reaches Discord.
     layout = _layout(args.blueprint) if args.command == "build" else None
+    if args.command == "restore" and not args.backup.is_file():
+        raise SystemExit(f"No backup at {args.backup}")
 
     async with Link(config.token()) as link:
         vault = Vault(link, store)
@@ -140,6 +157,25 @@ async def _dispatch(args: argparse.Namespace, store: Store) -> None:
                 into=args.into,
             )
             print(json.dumps(await follow(vault.import_guild(args.source, args.target, options)), indent=2))
+            return
+
+        if args.command == "backup":
+            await follow(vault.export(args.guild, _export_options(args)))
+            print(await vault.backup(args.guild, args.out))
+            return
+
+        if args.command == "restore":
+            options = RestoreOptions(
+                mode=Mode.DRY_RUN if args.dry_run else Mode.LIVE,
+                messages=Messages.SKIP if args.structure_only else Messages.INCLUDE,
+                channels=set(args.channel),
+            )
+            try:
+                report = await follow(vault.restore(args.backup, args.guild, options))
+            except UnknownGuild as error:
+                raise SystemExit(str(error)) from error
+
+            print(json.dumps(report, indent=2, ensure_ascii=False))
             return
 
         if args.command == "community":
